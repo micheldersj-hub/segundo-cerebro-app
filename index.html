@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Segundo Cérebro</title>
+  <meta name="description" content="Seu segundo cérebro: conversa, WhatsApp, agenda e lembretes num lugar só.">
+  <meta name="theme-color" content="#1F5F5B">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Cérebro">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Primeiro acesso -->
+  <section id="entrar" class="tela-entrar" hidden>
+    <img src="icon-192.png" alt="" width="72" height="72" class="logo">
+    <h1>Segundo Cérebro</h1>
+    <p>Cole a chave de acesso que o Claude te passou. Ela fica guardada só neste aparelho.</p>
+    <form id="form-chave">
+      <label for="chave">Chave de acesso</label>
+      <input id="chave" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <button type="submit" class="btn primario">Entrar</button>
+      <p id="erro-chave" class="erro" role="alert"></p>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <!-- Hoje -->
+    <section id="v-hoje" class="vista" data-titulo="Hoje">
+      <header class="topo">
+        <p id="hoje-data" class="data"></p>
+        <h1 id="hoje-saudacao">Bom dia</h1>
+      </header>
+      <article id="ancora" class="ancora" hidden>
+        <p class="ancora-rotulo">Uma coisa agora</p>
+        <p id="ancora-texto" class="ancora-texto"></p>
+        <button id="ancora-acao" class="btn claro" hidden></button>
+      </article>
+      <div id="hoje-blocos"></div>
+    </section>
+
+    <!-- Conversa -->
+    <section id="v-conversa" class="vista" data-titulo="Conversa" hidden>
+      <div id="mensagens" class="mensagens" aria-live="polite"></div>
+      <form id="form-chat" class="compositor">
+        <textarea id="texto" rows="1" placeholder="Escreva ou toque no microfone" aria-label="Mensagem"></textarea>
+        <button type="button" id="mic" class="redondo" aria-label="Gravar áudio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+        </button>
+        <button type="submit" id="enviar" class="redondo primario" aria-label="Enviar" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5l2.5 7.1L15 12l-9.5 1.4L3 20.5Z"/></svg>
+        </button>
+      </form>
+    </section>
+
+    <!-- WhatsApp -->
+    <section id="v-whats" class="vista" data-titulo="WhatsApp" hidden>
+      <header class="topo"><h1>WhatsApp</h1><p class="sub">Quem espera você aparece primeiro.</p></header>
+      <ul id="lista-contatos" class="lista"></ul>
+    </section>
+
+    <!-- Um contato -->
+    <section id="v-contato" class="vista" hidden>
+      <header class="topo barra">
+        <button class="voltar" data-ir="whats" aria-label="Voltar">‹</button>
+        <div><h1 id="contato-nome"></h1><p id="contato-resumo" class="sub"></p></div>
+      </header>
+      <div id="contato-msgs" class="mensagens whats"></div>
+      <div class="painel-resposta">
+        <textarea id="resposta" rows="3" placeholder="Sua resposta"></textarea>
+        <div class="acoes">
+          <button id="b-sugerir" class="btn claro">Sugerir resposta</button>
+          <a id="b-abrir" class="btn primario" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+        </div>
+        <div class="acoes pequenas">
+          <button id="b-resolvido" class="link">Já respondi</button>
+          <button id="b-silenciar" class="link">Silenciar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Avisos e ajustes -->
+    <section id="v-mais" class="vista" data-titulo="Mais" hidden>
+      <header class="topo"><h1>Avisos</h1></header>
+      <ul id="lista-avisos" class="lista avisos"></ul>
+      <h2 class="secao">Ajustes</h2>
+      <div class="ajustes">
+        <button id="b-push" class="btn claro">Ativar notificações</button>
+        <p id="push-dica" class="dica"></p>
+        <a id="b-google" class="btn claro" target="_blank" rel="noopener" hidden>Conectar Google Agenda e Gmail</a>
+        <ul id="status" class="status"></ul>
+        <button id="b-sair" class="link">Sair deste aparelho</button>
+      </div>
+    </section>
+
+    <nav class="abas" aria-label="Seções">
+      <button data-ir="hoje" class="ativa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 4v5l4 2"/></svg>Hoje</button>
+      <button data-ir="conversa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>Conversa</button>
+      <button data-ir="whats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z"/></svg>WhatsApp<span id="badge-whats" class="badge" hidden></span></button>
+      <button data-ir="mais"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg>Avisos<span id="badge-avisos" class="badge" hidden></span></button>
+    </nav>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
