@@ -1,5 +1,5 @@
 // Service worker do Segundo Cérebro: guarda a "casca" do app e recebe notificações push.
-const CACHE = 'cerebro-v2';
+const CACHE = 'cerebro-v3';
 const SHELL = ['./', './index.html', './app.js', './style.css', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -36,6 +36,9 @@ self.addEventListener('push', (e) => {
       icon: './icon-192.png',
       badge: './icon-192.png',
       tag: data.id || undefined,
+      requireInteraction: !!data.urgente,
+      renotify: !!data.urgente,
+      vibrate: data.urgente ? [400, 200, 400, 200, 400] : undefined,
       data: { url: data.url || './#avisos' },
     }),
   );

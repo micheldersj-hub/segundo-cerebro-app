@@ -277,6 +277,7 @@ async function carregarMais() {
     [!!st.whatsapp_ultima, st.whatsapp_ultima ? `WhatsApp Business (última mensagem ${quando(st.whatsapp_ultima)})` : 'WhatsApp Business (aguardando conexão)'],
   ];
   $('#status').innerHTML = itens.map(([ok, t]) => `<li class="${ok ? 'ok' : ''}">${esc(t)}</li>`).join('');
+  if (st.antecedencia_alarme) $('#alarme-min').textContent = st.antecedencia_alarme;
   const g = $('#b-google');
   g.hidden = st.google || !st.google_conectar; if (st.google_conectar) g.href = st.google_conectar;
 
@@ -287,6 +288,13 @@ async function carregarMais() {
     bp.textContent = 'Notificações ativas'; bp.disabled = true; dica.textContent = '';
   } else { bp.hidden = false; dica.textContent = ''; }
 }
+
+async function copiar(texto, ok) {
+  try { await navigator.clipboard.writeText(texto); aviso(ok); }
+  catch { prompt('Copie:', texto); }
+}
+$('#b-copiar-url').addEventListener('click', () => copiar(`${API}/alarmes?horas=6`, 'Endereço copiado.'));
+$('#b-copiar-chave').addEventListener('click', () => copiar(chave || '', 'Chave copiada.'));
 
 $('#b-push').addEventListener('click', async () => {
   try {
