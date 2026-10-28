@@ -913,6 +913,104 @@ $('#p-barra').addEventListener('change', (e) => tocarEm(Number(e.target.value)))
 // Ao abrir o app, reenvia o que tiver ficado na fila.
 setTimeout(enviarFila, 1500);
 
+
+// ---------------------------------------------------------------------------
+// Mãos-livres: o app fica ouvindo e só age quando a frase começa com "Dimy"
+// ---------------------------------------------------------------------------
+const Dimy = { ligado: false, stream: null, ctx: null, an: null, mr: null, pedacos: [], falando: false, ocupado: false, ultimaVoz: 0, inicioFala: 0, chao: 0.01, timer: null, ultimoComando: 0, wake: null };
+
+function falar(texto) {
+  return new Promise((ok) => {
+    try {
+      const u = new SpeechSynthesisUtterance(texto.replace(/[*_#•]/g, ''));
+      u.lang = 'pt-BR'; u.rate = 1.05;
+      const voz = speechSynthesis.getVoices().find((v) => v.lang?.startsWith('pt-BR'));
+      if (voz) u.voice = voz;
+      Dimy.falando = true;
+      u.onend = u.onerror = () => { Dimy.falando = false; ok(); };
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch { Dimy.falando = false; ok(); }
+  });
+}
+
+function estadoDimy(t) { $('#dimy-estado').textContent = t; }
+
+async function ligarDimy() {
+  try { Dimy.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { aviso('Libere o microfone para o app nos Ajustes do iPhone.'); return; }
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  Dimy.ctx = new Ctx(); Dimy.an = Dimy.ctx.createAnalyser(); Dimy.an.fftSize = 1024;
+  Dimy.ctx.createMediaStreamSource(Dimy.stream).connect(Dimy.an);
+  Dimy.ligado = true; Dimy.ultimoComando = Date.now();
+  try { Dimy.wake = await navigator.wakeLock?.request('screen'); } catch { /* ok */ }
+  $('#b-maos-livres').setAttribute('aria-pressed', 'true');
+  $('.barra-dimy').classList.add('ouvindo');
+  falar('Pode falar.'); // destrava a voz do iPhone (precisa de um toque)
+  // Mede o ruído do ambiente por 1 s para saber o que é voz.
+  const dados = new Float32Array(1024); let soma = 0, n = 0;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 1000) { Dimy.an.getFloatTimeDomainData(dados); soma += rms(dados); n++; await new Promise((r) => setTimeout(r, 50)); }
+  Dimy.chao = Math.max(0.004, soma / n);
+  estadoDimy('Ouvindo. Diga "Dimy, …"');
+  Dimy.timer = setInterval(ouvirDimy, 60);
+}
+
+function desligarDimy(motivo) {
+  clearInterval(Dimy.timer);
+  try { if (Dimy.mr?.state === 'recording') { Dimy.mr.onstop = null; Dimy.mr.stop(); } } catch { /* ok */ }
+  Dimy.stream?.getTracks().forEach((t) => t.stop());
+  try { Dimy.ctx?.close(); } catch { /* ok */ }
+  try { Dimy.wake?.release(); } catch { /* ok */ }
+  Object.assign(Dimy, { ligado: false, stream: null, ctx: null, an: null, mr: null });
+  $('#b-maos-livres').setAttribute('aria-pressed', 'false');
+  $('.barra-dimy').classList.remove('ouvindo');
+  estadoDimy(motivo || 'Ligue e é só falar: "Dimy, agenda…"');
+}
+
+const rms = (d) => { let s = 0; for (const v of d) s += v * v; return Math.sqrt(s / d.length); };
+
+function ouvirDimy() {
+  if (!Dimy.ligado || !Dimy.an) return;
+  if (Date.now() - Dimy.ultimoComando > 30 * 60e3) { desligarDimy('Desliguei o mãos-livres depois de 30 min sem comandos.'); return; }
+  if (Dimy.falando || Dimy.ocupado) return;
+  const dados = new Float32Array(1024); Dimy.an.getFloatTimeDomainData(dados);
+  const nivel = rms(dados), agora = performance.now();
+  const voz = nivel > Math.max(0.015, Dimy.chao * 3.2);
+  if (voz) Dimy.ultimaVoz = agora;
+  const gravando = Dimy.mr?.state === 'recording';
+  if (voz && !gravando) {
+    const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+    Dimy.mr = new MediaRecorder(Dimy.stream, tipo ? { mimeType: tipo } : undefined);
+    Dimy.pedacos = []; Dimy.inicioFala = agora;
+    Dimy.mr.ondataavailable = (e) => e.data.size && Dimy.pedacos.push(e.data);
+    Dimy.mr.onstop = enviarDimy;
+    Dimy.mr.start(250);
+  } else if (gravando && (agora - Dimy.ultimaVoz > 1300 || agora - Dimy.inicioFala > 30000)) {
+    Dimy.mr.stop();
+  }
+}
+
+async function enviarDimy() {
+  const fala = Dimy.ultimaVoz - Dimy.inicioFala;
+  const audio = new Blob(Dimy.pedacos, { type: (Dimy.mr?.mimeType || 'audio/mp4').split(';')[0] });
+  if (fala < 500 || audio.size < 2000) return; // tosse, barulho
+  Dimy.ocupado = true; estadoDimy('Entendendo…');
+  try {
+    const r = await api('/audio?maos_livres=1', { metodo: 'POST', corpo: audio, tipo: audio.type });
+    if (r.ignorado) return;
+    Dimy.ultimoComando = Date.now();
+    if (!$('#v-conversa').hidden) { bolha('eu', `🎤 ${r.texto}`, new Date().toISOString()); bolha('ia', r.resposta, new Date().toISOString()); }
+    estadoDimy('Respondendo…');
+    await falar(r.resposta);
+  } catch (e) { aviso(`Dimy: ${e.message}`); }
+  finally { Dimy.ocupado = false; if (Dimy.ligado) estadoDimy('Ouvindo. Diga "Dimy, …"'); }
+}
+
+$('#b-maos-livres').addEventListener('click', () => (Dimy.ligado ? desligarDimy() : ligarDimy()));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && Dimy.ligado) desligarDimy('O mãos-livres para quando o app sai da tela. Toque para ligar de novo.');
+});
+
 // ---------------------------------------------------------------------------
 // Entrada
 // ---------------------------------------------------------------------------

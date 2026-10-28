@@ -240,6 +240,13 @@ details ul { margin-top: 8px; }
 .rodape-gravacao { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--linha); display: grid; gap: 8px; }
 .rodape-gravacao select { flex: 1; border: 1px solid var(--linha); background: var(--superficie); border-radius: 14px; padding: 10px 12px; }
 
+.barra-dimy { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 2; background: var(--fundo); padding: 4px 0 10px; }
+.barra-dimy .dica { font-size: 14px; }
+.btn.pequeno { padding: 8px 14px; font-size: 15px; flex: none; }
+#b-maos-livres[aria-pressed="true"] { background: var(--mar); color: #F2F6F5; }
+#b-maos-livres[aria-pressed="true"]::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: pisca 1.2s infinite; }
+.barra-dimy.ouvindo .dica { color: var(--mar); font-weight: 600; }
+
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(90px + env(safe-area-inset-bottom)); background: var(--tinta); color: var(--fundo); padding: 10px 16px; border-radius: 999px; font-size: 15px; z-index: 10; max-width: 90vw; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
