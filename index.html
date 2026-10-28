@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Segundo Cérebro</title>
-  <meta name="description" content="Seu segundo cérebro: conversa, WhatsApp, agenda e lembretes num lugar só.">
+  <meta name="description" content="Seu segundo cérebro: conversa, gravador de reuniões, WhatsApp, agenda e lembretes num lugar só.">
   <meta name="theme-color" content="#1F5F5B">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -60,6 +60,95 @@
       </form>
     </section>
 
+    <!-- Gravar -->
+    <section id="v-gravar" class="vista" data-titulo="Gravar" hidden>
+      <header class="topo"><h1>Gravar</h1><p class="sub">Reuniões, ligações e ideias viram ata, plano de ação e memória.</p></header>
+      <div class="cartao-gravar">
+        <div class="tipos" role="radiogroup" aria-label="O que vai gravar">
+          <button class="chip ativo" data-tipo="reuniao" role="radio" aria-checked="true">Reunião</button>
+          <button class="chip" data-tipo="ligacao" role="radio" aria-checked="false">Ligação</button>
+          <button class="chip" data-tipo="nota" role="radio" aria-checked="false">Nota de voz</button>
+        </div>
+        <button id="b-gravar" class="botao-gravar" aria-label="Começar a gravar"><span></span></button>
+        <p id="dica-tipo" class="dica centro">Deixe o iPhone no meio da mesa, com a tela para cima.</p>
+        <button id="b-importar" class="btn claro">Importar áudio</button>
+        <p class="dica centro">Ligação gravada no iPhone, áudio do WhatsApp ou qualquer arquivo.</p>
+        <input id="arquivo-audio" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.opus,video/mp4" hidden>
+        <p id="importando" class="dica centro" hidden></p>
+      </div>
+      <div id="cartao-voz" class="cartao-voz" hidden>
+        <p><strong>Ensine sua voz</strong> para eu sempre saber o que foi você que falou. Leva 8 segundos.</p>
+        <button id="b-voz" class="btn claro">Gravar minha voz</button>
+      </div>
+      <form id="form-perguntar-todas" class="perguntar">
+        <input id="pergunta-todas" placeholder="Pergunte às suas gravações" autocomplete="off" aria-label="Pergunta sobre as gravações">
+        <button class="btn primario" type="submit">Perguntar</button>
+      </form>
+      <div id="resposta-todas" class="resposta" hidden></div>
+      <h2 class="secao">Gravações</h2>
+      <ul id="lista-gravacoes" class="lista"></ul>
+    </section>
+
+    <!-- Gravando agora -->
+    <section id="v-gravando" class="vista gravando" hidden>
+      <p id="rec-tipo" class="rec-tipo">Reunião</p>
+      <p id="rec-tempo" class="rec-tempo" aria-live="off">00:00</p>
+      <div id="rec-nivel" class="rec-nivel" aria-hidden="true"></div>
+      <p id="rec-estado" class="rec-estado">Gravando</p>
+      <div id="rec-aviso" class="rec-aviso" hidden>
+        <p>O iPhone pausou o microfone (a tela apagou ou você saiu do app). O que já foi gravado está salvo.</p>
+        <button id="b-continuar-mic" class="btn primario">Continuar gravando</button>
+      </div>
+      <div class="rec-acoes">
+        <button id="b-destaque" class="rec-botao"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7L12 3Z"/></svg>Destaque</button>
+        <button id="b-foto" class="rec-botao"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4V8Z"/><circle cx="12" cy="13" r="3.5"/></svg>Foto</button>
+        <button id="b-nota" class="rec-botao"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5V4Zm9 0v5h5M8 13h8M8 17h5"/></svg>Nota</button>
+      </div>
+      <input id="arquivo-foto" type="file" accept="image/*" capture="environment" hidden>
+      <div class="rec-controles">
+        <button id="b-pausar" class="btn claro">Pausar</button>
+        <button id="b-encerrar" class="btn perigo">Encerrar</button>
+      </div>
+      <p class="dica centro">Mantenha o app aberto. A tela fica acesa sozinha; o áudio vai sendo enviado a cada 5 minutos.</p>
+    </section>
+
+    <!-- Uma gravação -->
+    <section id="v-gravacao" class="vista" hidden>
+      <header class="topo barra">
+        <button class="voltar" data-ir="gravar" aria-label="Voltar">‹</button>
+        <div><h1 id="g-titulo">Gravação</h1><p id="g-meta" class="sub"></p></div>
+      </header>
+      <div id="g-processando" class="processando" hidden></div>
+      <div id="g-player" class="player" hidden>
+        <button id="p-tocar" class="redondo primario" aria-label="Tocar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7L8 5Z"/></svg></button>
+        <input id="p-barra" type="range" min="0" max="100" step="1" value="0" aria-label="Posição do áudio">
+        <span id="p-tempo" class="p-tempo">00:00</span>
+        <audio id="p-audio" preload="none"></audio>
+      </div>
+      <div class="segmentos" role="tablist">
+        <button class="seg ativo" data-pane="resumo" role="tab">Resumo</button>
+        <button class="seg" data-pane="transcricao" role="tab">Transcrição</button>
+        <button class="seg" data-pane="perguntar" role="tab">Perguntar</button>
+      </div>
+      <div id="pane-resumo" class="pane"></div>
+      <div id="pane-transcricao" class="pane" hidden></div>
+      <div id="pane-perguntar" class="pane" hidden>
+        <div id="g-respostas" class="mensagens"></div>
+        <form id="form-perguntar" class="perguntar">
+          <input id="pergunta" placeholder="Ex.: o que o cliente pediu?" autocomplete="off" aria-label="Pergunta sobre esta gravação">
+          <button class="btn primario" type="submit">Perguntar</button>
+        </form>
+      </div>
+      <div id="g-rodape" class="rodape-gravacao" hidden>
+        <label for="g-modelo" class="dica">Refazer o resumo como</label>
+        <div class="acoes">
+          <select id="g-modelo"></select>
+          <button id="b-refazer" class="btn claro">Refazer</button>
+        </div>
+        <button id="b-apagar" class="link">Apagar gravação</button>
+      </div>
+    </section>
+
     <!-- WhatsApp -->
     <section id="v-whats" class="vista" data-titulo="WhatsApp" hidden>
       <header class="topo"><h1>WhatsApp</h1><p class="sub">Quem espera você aparece primeiro.</p></header>
@@ -109,11 +198,13 @@
     <nav class="abas" aria-label="Seções">
       <button data-ir="hoje" class="ativa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 4v5l4 2"/></svg>Hoje</button>
       <button data-ir="conversa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>Conversa</button>
+      <button data-ir="gravar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg>Gravar</button>
       <button data-ir="whats"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3Z"/></svg>WhatsApp<span id="badge-whats" class="badge" hidden></span></button>
       <button data-ir="mais"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg>Avisos<span id="badge-avisos" class="badge" hidden></span></button>
     </nav>
   </main>
 
+  <button id="pilula-gravando" class="pilula" data-ir="gravando" hidden><span class="ponto"></span><span id="pilula-tempo">Gravando</span></button>
   <div id="toast" class="toast" role="status" hidden></div>
   <script src="app.js" type="module"></script>
 </body>
