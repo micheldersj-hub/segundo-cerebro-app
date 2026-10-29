@@ -1,6 +1,7 @@
 // Segundo Cérebro — app do iPhone (PWA). Fala só com a função "app" do Supabase.
 const API = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/app';
 const GRAVADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/gravador';
+const ORACULO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/oraculo';
 const CHAVE = 'cerebro-chave';
 const $ = (s) => document.querySelector(s);
 
@@ -18,7 +19,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   let body;
   if (corpo instanceof Blob) { body = corpo; headers['content-type'] = tipo || corpo.type || 'application/octet-stream'; }
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
-  const base = /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : API;
+  const base = /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/dossies/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error('Chave inválida.'); }
@@ -48,9 +49,9 @@ const nomeDe = (c) => c?.name || (c?.wa_id ? '+' + c.wa_id : 'Contato');
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', mais: '#v-mais',
+  whats: '#v-whats', contato: '#v-contato', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie',
 };
-const ABA_DE = { contato: 'whats', gravando: 'gravar', gravacao: 'gravar' };
+const ABA_DE = { contato: 'whats', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje' };
 
 function ir(destino) { location.hash = destino; }
 
@@ -61,6 +62,7 @@ async function rota() {
   document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.ir === (ABA_DE[vista] || vista)));
   $('#pilula-gravando').hidden = !Rec.ativo || vista === 'gravando';
   if (vista !== 'gravacao') pararDetalhe();
+  if (vista !== 'dossie') clearTimeout(Oraculo.timer);
   window.scrollTo(0, 0);
   try {
     if (vista === 'hoje') await carregarHoje();
@@ -71,6 +73,8 @@ async function rota() {
     if (vista === 'gravar') await carregarGravacoes();
     if (vista === 'gravando') mostrarGravando();
     if (vista === 'gravacao') await carregarGravacao(arg);
+    if (vista === 'oraculo') await carregarOraculo();
+    if (vista === 'dossie') await carregarDossie(arg);
   } catch (e) { aviso(e.message); }
 }
 
@@ -263,16 +267,16 @@ $('#folha-form').addEventListener('submit', async (e) => {
 
 function proximaHoraCheia() { const d = new Date(Date.now() + 3600e3); d.setMinutes(0); return horaISO(d); }
 
-function editarEvento(ev) {
+function editarEvento(ev, sug) {
   const dia = ev ? diaISO(ev.inicio) : Agenda.dia;
   const ini = ev && !ev.dia_inteiro ? horaISO(ev.inicio) : proximaHoraCheia();
   const fim = ev && ev.fim && !ev.dia_inteiro ? horaISO(ev.fim) : horaISO(new Date(Date.parse(montarISO(dia, ini)) + 3600e3));
   abrirFolha({
     titulo: ev ? 'Editar compromisso' : 'Novo compromisso',
     campos: [
-      { rotulo: 'O quê', nome: 'titulo', valor: ev?.titulo, placeholder: 'Visita – cliente', obrigatorio: true },
+      { rotulo: 'O quê', nome: 'titulo', valor: ev?.titulo ?? sug?.titulo, placeholder: 'Visita – cliente', obrigatorio: true },
       { tipo: 'data-hora', data: 'dia', hora: 'inicio', hora2: 'fim', vData: dia, vHora: ini, vHora2: fim, rotuloHora: 'Início' },
-      { rotulo: 'Onde', nome: 'local', valor: ev?.local, placeholder: 'Opcional' },
+      { rotulo: 'Onde', nome: 'local', valor: ev?.local ?? sug?.local, placeholder: 'Opcional' },
     ],
     salvar: async (f) => {
       if (!f.titulo?.trim() || !f.dia || !f.inicio) throw new Error('Preencha o quê, o dia e a hora.');
@@ -1217,6 +1221,212 @@ function iniciar() {
   window.addEventListener('hashchange', rota);
   rota();
 }
+
+// ---------------------------------------------------------------------------
+// Oráculo: dossiês de clientes
+// ---------------------------------------------------------------------------
+const Oraculo = { timer: null, atual: null, pane: 'abordagem' };
+const RISCO = {
+  baixo: { t: 'Risco baixo', c: 'verde' }, medio: { t: 'Risco médio', c: 'ambar' }, alto: { t: 'Risco alto', c: 'vermelho' },
+  indefinido: { t: 'Risco indefinido', c: 'cinza' },
+};
+const TIPO_SINAL = {
+  divida_federal: 'Dívida federal', divida_estadual: 'Dívida estadual', divida_municipal: 'Dívida municipal', protesto: 'Protesto',
+  credito: 'Crédito', recuperacao_judicial: 'Recuperação judicial', judicial: 'Processo', trabalhista: 'Trabalhista',
+  reputacao: 'Reputação', cadastral: 'Cadastro', outro: 'Outro',
+};
+const ETAPAS = ['Identificar empresa', 'Mercado e posicionamento', 'Reputação e finanças', 'Dossiê e abordagem'];
+const fmtCnpj = (c) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+const fmtReais = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }));
+const fmtData = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ }) : '');
+const dominio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+const lis = (arr) => (arr || []).filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join('');
+
+async function carregarOraculo() {
+  const { dossies } = await api('/dossies');
+  $('#lista-dossies').innerHTML = dossies.length
+    ? dossies.map((d) => {
+      const r = RISCO[d.risco] || null;
+      const estado = d.status === 'pronto' ? (r ? `<i class="selo ${r.c}">${r.t.replace('Risco ', '')}</i>` : '')
+        : d.status === 'erro' ? '<i class="selo vermelho">erro</i>' : '<i class="selo roxo pulsando">pesquisando</i>';
+      return `<li><button class="pessoa" data-ir="dossie/${esc(d.id)}"><span class="avatar-p roxo">${esc(iniciais(d.nome || d.alvo))}</span>
+        <span class="pessoa-corpo"><span class="t">${esc(d.nome || d.alvo)}</span><span class="d">${esc(d.status === 'pronto' ? (d.resumo || '') : (d.etapa || 'Na fila'))}</span></span>
+        <span class="h">${estado}</span></button></li>`;
+    }).join('')
+    : '<li><p class="vazio">Nenhum dossiê ainda. Pesquise o primeiro cliente acima.</p></li>';
+}
+
+$('#form-oraculo').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const alvo = $('#oraculo-alvo').value.trim();
+  if (!alvo) return;
+  const bt = $('#oraculo-enviar'); bt.disabled = true; bt.textContent = 'Enviando…';
+  try {
+    const { id } = await api('/dossies', { metodo: 'POST', corpo: { alvo, contexto: $('#oraculo-contexto').value.trim() } });
+    $('#oraculo-alvo').value = ''; $('#oraculo-contexto').value = '';
+    ir(`dossie/${id}`);
+  } catch (err) { aviso(err.message); } finally { bt.disabled = false; bt.textContent = 'Pesquisar'; }
+});
+
+function etapaAtual(d) {
+  if (!d.cadastro) return 0;
+  if (/mercado/i.test(d.etapa || '') && !/pesquisado/i.test(d.etapa || '')) return 1;
+  if (/Mercado pesquisado|reputação e sinais/i.test(d.etapa || '')) return 2;
+  if (/Sinais financeiros pesquisados|Montando/i.test(d.etapa || '')) return 3;
+  return 1;
+}
+
+async function carregarDossie(id) {
+  clearTimeout(Oraculo.timer);
+  const d = await api(`/dossies/${encodeURIComponent(id)}`);
+  Oraculo.atual = d;
+  const c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null;
+  $('#dossie-nome').textContent = d.nome || d.alvo;
+  $('#dossie-sub').textContent = [d.cnpj ? fmtCnpj(d.cnpj) : '', c?.municipio ? `${c.municipio}/${c.uf}` : ''].filter(Boolean).join(' · ');
+  const corpo = $('#dossie-corpo');
+
+  if (d.status !== 'pronto') {
+    if (d.status === 'erro') {
+      corpo.innerHTML = `<div class="processando"><p><strong>Não consegui concluir a pesquisa.</strong></p><p class="dica">${esc(d.error || '')}</p>
+        <button class="btn primario largo" data-dossie="refazer">Tentar de novo</button></div>${rodapeDossie()}`;
+      return;
+    }
+    const at = etapaAtual(d);
+    corpo.innerHTML = `<div class="progresso-oraculo">
+      <span class="ic roxo grande pulsando"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+      <p class="po-titulo">${esc(d.etapa || 'Na fila')}…</p>
+      <ol class="etapas">${ETAPAS.map((t, i) => `<li class="${i < at ? 'feito' : i === at ? 'agora' : ''}">${t}</li>`).join('')}</ol>
+      <p class="dica centro">Pode sair desta tela: eu aviso quando o dossiê ficar pronto.</p></div>`;
+    Oraculo.timer = setTimeout(() => location.hash === `#dossie/${id}` && carregarDossie(id).catch(() => {}), 7000);
+    return;
+  }
+
+  const x = d.dossie || {};
+  const fin = x.financeiro || {};
+  const r = RISCO[d.risco] || RISCO.indefinido;
+  const ficha = c ? [
+    ['Situação', c.situacao], ['Abertura', fmtData(c.abertura)], ['Porte', c.porte],
+    ['Simples', c.simples == null ? '—' : c.simples ? (c.mei ? 'MEI' : 'Sim') : 'Não'], ['Capital', fmtReais(c.capital_social)],
+    ['Atividade', c.cnae_fiscal_descricao],
+  ].filter(([, v]) => v) : [];
+
+  corpo.innerHTML = `
+    <article class="risco-cartao ${r.c}">
+      <div class="risco-topo"><span class="risco-selo">${r.t}</span><button class="link" data-dpane-ir="riscos">Ver sinais ›</button></div>
+      <p>${esc(fin.resumo || '')}</p>
+    </article>
+    <p class="resumo-texto">${esc(x.resumo || '')}</p>
+    ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div class="ficha-item ${k === 'Atividade' ? 'largo' : ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '<p class="dica">CNPJ não identificado: dossiê feito só com o que é público na web.</p>'}
+    <div class="segs" role="tablist">
+      ${[['abordagem', 'Abordagem'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg ${Oraculo.pane === k ? 'ativo' : ''}" data-dpane="${k}">${t}</button>`).join('')}
+    </div>
+    <div id="dpane">${paneDossie(d, Oraculo.pane)}</div>
+    ${rodapeDossie()}`;
+}
+
+function rodapeDossie() {
+  return `<div class="rodape-gravacao"><div class="acoes"><button class="btn claro" data-dossie="refazer">Pesquisar de novo</button>
+    <button class="btn claro perigo-txt" data-dossie="apagar">Apagar</button></div></div>`;
+}
+
+function paneDossie(d, p) {
+  const x = d.dossie || {};
+  const ab = x.abordagem || {};
+  const c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null;
+  if (p === 'abordagem') {
+    const fone = String(c?.telefone || '').replace(/\D/g, '');
+    return `
+      <div class="bloco-o"><h3>Por que abordar</h3><p>${esc(ab.tese || '')}</p>${ab.oferta_sugerida ? `<p class="oferta"><b>Oferta:</b> ${esc(ab.oferta_sugerida)}</p>` : ''}</div>
+      <div class="dupla">
+        <div class="mini"><span class="ic azul"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></svg></span><b>Gancho</b><p>${esc(ab.gancho || '')}</p></div>
+        <div class="mini"><span class="ic verde"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><b>Canal e quem</b><p>${esc(ab.canal || '')}</p></div>
+      </div>
+      ${ab.momento ? `<p class="dica momento"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${esc(ab.momento)}</p>` : ''}
+      <div class="msg-whats">
+        <div class="msg-cab"><b>Primeira mensagem</b><span>WhatsApp</span></div>
+        <p id="msg-oraculo">${esc(ab.mensagem_whatsapp || '')}</p>
+        <div class="acoes"><button class="btn claro" data-dossie="copiar">Copiar</button>
+          <a class="btn primario" target="_blank" rel="noopener" href="https://wa.me/${fone ? (fone.startsWith('55') ? fone : '55' + fone) : ''}?text=${encodeURIComponent(ab.mensagem_whatsapp || '')}">Abrir no WhatsApp</a></div>
+      </div>
+      <div class="acoes"><button class="btn claro" data-dossie="visita"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Agendar visita</button>
+        <button class="btn claro" data-dossie="followup"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg>Lembrete</button></div>
+      ${ab.roteiro?.length ? `<div class="bloco-o"><h3>Roteiro</h3><ol class="passos">${lis(ab.roteiro)}</ol></div>` : ''}
+      ${ab.perguntas?.length ? `<div class="bloco-o"><h3>Perguntas para descobrir</h3><ul class="marcadores">${lis(ab.perguntas)}</ul></div>` : ''}
+      ${ab.objecoes?.length ? `<div class="bloco-o"><h3>Objeções prováveis</h3>${ab.objecoes.map((o) => `<details><summary>${esc(o.objecao)}</summary><p>${esc(o.resposta)}</p></details>`).join('')}</div>` : ''}
+      ${ab.cuidados?.length ? `<div class="bloco-o alerta-suave"><h3>Cuidados</h3><ul class="marcadores">${lis(ab.cuidados)}</ul></div>` : ''}
+      ${x.proximos_passos?.length ? `<div class="bloco-o"><h3>Próximos passos</h3><ul class="checks">${lis(x.proximos_passos)}</ul></div>` : ''}`;
+  }
+  if (p === 'empresa') {
+    const e = x.empresa || {}, m = x.mercado || {};
+    const linhas = [['O que faz', e.o_que_faz], ['Público', e.publico], ['Porte', e.porte_estimado], ['Faturamento', e.faturamento_estimado], ['Como recebe hoje', e.como_recebe_hoje], ['Presença digital', e.presenca_digital]].filter(([, v]) => v);
+    const chips = (arr, cls = '') => (arr || []).map((t) => `<span class="chip-o ${cls}">${esc(t)}</span>`).join('');
+    return `
+      <div class="bloco-o"><h3>A empresa</h3><dl class="def">${linhas.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl></div>
+      <div class="bloco-o"><h3>Posicionamento</h3><p>${esc(m.posicionamento || '')}</p>
+        ${m.diferenciais?.length ? `<p class="rot">Diferenciais</p><div class="chips">${chips(m.diferenciais, 'verde')}</div>` : ''}
+        ${m.concorrentes?.length ? `<p class="rot">Concorrentes</p><div class="chips">${chips(m.concorrentes)}</div>` : ''}</div>
+      ${x.dores_segmento?.length ? `<div class="bloco-o"><h3>Dores do segmento</h3>${x.dores_segmento.map((dd) => `<div class="dor"><b>${esc(dd.dor)}</b>${dd.impacto ? `<span>${esc(dd.impacto)}</span>` : ''}</div>`).join('')}</div>` : ''}
+      ${m.tendencias?.length ? `<div class="bloco-o"><h3>Tendências do setor</h3><ul class="marcadores">${lis(m.tendencias)}</ul></div>` : ''}
+      ${c?.socios?.length ? `<div class="bloco-o"><h3>Quadro societário</h3><ul class="marcadores">${c.socios.map((s) => `<li>${esc(s.nome)}${s.qualificacao ? ` · ${esc(s.qualificacao)}` : ''}</li>`).join('')}</ul></div>` : ''}`;
+  }
+  if (p === 'riscos') {
+    const f = x.financeiro || {};
+    const cnpj = d.cnpj || '';
+    const checar = [
+      ['Protestos (cartórios do Brasil)', 'https://www.pesquisaprotesto.com.br/'],
+      ['Dívida ativa da União (PGFN)', 'https://www.listadevedores.pgfn.gov.br/'],
+      ['Certidão negativa federal (Receita)', 'https://servicos.receitafederal.gov.br/servico/certidoes/#/home/cnpj'],
+      ['Processos (JusBrasil)', `https://www.jusbrasil.com.br/busca?q=${encodeURIComponent(cnpj ? fmtCnpj(cnpj) : d.nome || d.alvo)}`],
+      ['Reclame Aqui', `https://www.reclameaqui.com.br/busca/?q=${encodeURIComponent(d.nome || d.alvo)}`],
+    ];
+    return `
+      ${f.sinais?.length ? `<div class="bloco-o"><h3>Sinais encontrados</h3>${f.sinais.map((s) => `<div class="sinal g-${esc(s.gravidade || 'media')}">
+          <span class="sinal-tipo">${esc(TIPO_SINAL[s.tipo] || s.tipo)}</span><p>${esc(s.descricao)}</p>${s.fonte && /^https?:/.test(s.fonte) ? `<a href="${esc(s.fonte)}" target="_blank" rel="noopener">${esc(dominio(s.fonte))} ›</a>` : ''}</div>`).join('')}</div>`
+        : '<div class="bloco-o"><h3>Sinais encontrados</h3><p>Nenhum sinal financeiro ou jurídico encontrado em fontes públicas.</p></div>'}
+      ${f.nao_encontrado?.length ? `<div class="bloco-o"><h3>Pesquisado, nada público</h3><ul class="checks">${lis(f.nao_encontrado)}</ul></div>` : ''}
+      <div class="bloco-o"><h3>Confirmar na fonte oficial</h3>
+        <p class="dica">Serasa e a lista completa de protestos não são públicos: só por consulta oficial (o Serasa exige contrato). ${cnpj ? `CNPJ para copiar: <b>${fmtCnpj(cnpj)}</b>` : ''}</p>
+        <div class="links-oficiais">${checar.map(([t, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${t}<span>›</span></a>`).join('')}</div></div>
+      ${x.reputacao ? `<div class="bloco-o"><h3>Reputação</h3><p>${esc(x.reputacao)}</p></div>` : ''}`;
+  }
+  const fontes = d.fontes || [];
+  return `<div class="bloco-o"><h3>Fontes consultadas</h3>${fontes.length ? `<div class="links-oficiais">${fontes.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(dominio(u))}<span>›</span></a>`).join('')}</div>` : '<p>Sem links registrados.</p>'}
+    <p class="dica">Cadastro: dados públicos da Receita Federal (via BrasilAPI).</p></div>`;
+}
+
+$('#v-dossie').addEventListener('click', async (e) => {
+  const seg = e.target.closest('[data-dpane], [data-dpane-ir]');
+  if (seg) {
+    Oraculo.pane = seg.dataset.dpane || seg.dataset.dpaneIr;
+    document.querySelectorAll('.dseg').forEach((b) => b.classList.toggle('ativo', b.dataset.dpane === Oraculo.pane));
+    $('#dpane').innerHTML = paneDossie(Oraculo.atual, Oraculo.pane);
+    if (seg.dataset.dpaneIr) $('.segs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const b = e.target.closest('[data-dossie]');
+  if (!b) return;
+  const d = Oraculo.atual;
+  const nome = d.nome || d.alvo;
+  try {
+    switch (b.dataset.dossie) {
+      case 'copiar':
+        await navigator.clipboard.writeText(d.dossie?.abordagem?.mensagem_whatsapp || '');
+        aviso('Mensagem copiada.'); break;
+      case 'visita': {
+        const c = d.cadastro || {};
+        editarEvento(null, { titulo: `Visita – ${nome}`, local: [c.bairro, c.municipio].filter(Boolean).join(', ') });
+        break;
+      }
+      case 'followup':
+        editarLembrete(null, { texto: `Falar com ${nome}`, dia: somaDias(diaISO(new Date()), 1), hora: '10:00' }); break;
+      case 'refazer':
+        await api(`/dossies/${d.id}/refazer`, { metodo: 'POST' }); aviso('Pesquisando de novo.'); carregarDossie(d.id); break;
+      case 'apagar':
+        if (!confirm(`Apagar o dossiê de ${nome}?`)) return;
+        await api(`/dossies/${d.id}/apagar`, { metodo: 'POST' }); aviso('Dossiê apagado.'); ir('oraculo'); break;
+    }
+  } catch (err) { aviso(err.message); }
+});
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 // Ao voltar para o app, atualiza a tela atual.
