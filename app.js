@@ -19,7 +19,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   let body;
   if (corpo instanceof Blob) { body = corpo; headers['content-type'] = tipo || corpo.type || 'application/octet-stream'; }
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
-  const base = /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/dossies/.test(caminho) ? ORACULO : API;
+  const base = /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error('Chave inválida.'); }
@@ -178,7 +178,7 @@ async function carregarSemana() {
     Agenda.inicioSemana = ini;
     try {
       const r = await api(`/agenda?de=${ini}&dias=7`);
-      Agenda.google = r.google; Agenda.eventos = r.eventos;
+      Agenda.google = r.google; Agenda.eventos = Array.isArray(r.eventos) ? r.eventos : [];
     } catch (e) { Agenda.eventos = []; aviso(`Agenda: ${e.message}`); }
   }
   desenharSemana(); desenharLinhaTempo();
@@ -1253,7 +1253,7 @@ const TIPO_SINAL = {
   credito: 'Crédito', recuperacao_judicial: 'Recuperação judicial', judicial: 'Processo', trabalhista: 'Trabalhista',
   reputacao: 'Reputação', cadastral: 'Cadastro', outro: 'Outro',
 };
-const ETAPAS = ['Identificar empresa', 'Mercado e posicionamento', 'Reputação e finanças', 'Dossiê e abordagem'];
+const ETAPAS = ['Identificar empresa', 'Mercado e posicionamento', 'Reputação e finanças', 'Sócios e responsáveis', 'Dossiê e abordagem'];
 const fmtCnpj = (c) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtReais = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }));
 const fmtData = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ }) : '');
@@ -1336,11 +1336,102 @@ $('#form-oraculo').addEventListener('submit', async (e) => {
   } catch (err) { aviso(err.message); } finally { bt.disabled = false; bt.textContent = 'Pesquisar'; }
 });
 
+// ---------------------------------------------------------------------------
+// Região: sua localização atual (só com o app aberto) e empresas por perto
+// ---------------------------------------------------------------------------
+const Geo = { ultimo: null, watch: null, empresas: [] };
+const geoLigado = () => guardado.ler('cerebro-geo') === '1';
+const distM = (a, b) => { const R = 6371e3, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const fmtDist = (m) => (m == null ? '' : m < 1000 ? `${Math.round(m / 10) * 10} m` : `${(m / 1000).toFixed(1).replace('.', ',')} km`);
+const pegarPosicao = () => new Promise((ok, erro) => navigator.geolocation.getCurrentPosition(ok, erro, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }));
+
+async function enviarLocal(pos, forcar = false) {
+  const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  const u = Geo.ultimo;
+  if (!forcar && u && distM(u, p) < 150 && Date.now() - u.t < 10 * 60e3) return u.local;
+  const end = !u || !u.local?.cidade || distM(u, p) >= 150 ? await enderecoNoCelular(p) : null;
+  const { local } = await api('/local', { metodo: 'POST', corpo: { ...p, precisao: Math.round(pos.coords.accuracy || 0), end } });
+  Geo.ultimo = { ...p, t: Date.now(), local };
+  mostrarOnde(local);
+  return local;
+}
+// Endereço da posição, consultado direto do celular (OpenStreetMap); se falhar, o servidor tenta.
+const UFS = { 'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM', 'Bahia': 'BA', 'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES', 'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS', 'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR', 'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN', 'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC', 'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO' };
+async function enderecoNoCelular({ lat, lng }) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=pt-BR`, { signal: AbortSignal.timeout?.(7000) });
+    if (!r.ok) return null;
+    const a = (await r.json()).address || {};
+    const bairro = a.suburb || a.neighbourhood || a.quarter || a.city_district || null;
+    const cidade = a.city || a.town || a.village || a.municipality || null;
+    const uf = (a['ISO3166-2-lvl4'] || '').replace(/^BR-/, '') || UFS[a.state] || a.state || null;
+    if (!cidade) return null;
+    const rua = [a.road, a.house_number].filter(Boolean).join(', ');
+    return { endereco: [rua, bairro, uf ? `${cidade}/${uf}` : cidade].filter(Boolean).join(' · '), bairro, cidade, uf };
+  } catch { return null; }
+}
+function iniciarGeo() {
+  if (!navigator.geolocation || !geoLigado() || !chave || Geo.watch != null) return;
+  Geo.watch = navigator.geolocation.watchPosition((pos) => enviarLocal(pos).catch(() => {}), () => {}, { enableHighAccuracy: false, maximumAge: 120000 });
+}
+function pararGeo() { if (Geo.watch != null) { navigator.geolocation.clearWatch(Geo.watch); Geo.watch = null; } }
+document.addEventListener('visibilitychange', () => (document.hidden ? pararGeo() : iniciarGeo()));
+function mostrarOnde(local) {
+  const el = $('#perto-onde'); if (!el || !local) return;
+  el.textContent = `Você está em ${local.endereco || [local.bairro, local.cidade].filter(Boolean).join(', ') || 'local sem endereço'}`;
+  $('#perto-desligar').hidden = !geoLigado();
+}
+
+async function buscarPerto() {
+  if (!navigator.geolocation) { aviso('Este aparelho não informa a localização.'); return; }
+  const bt = $('#perto-btn'), lista = $('#lista-perto');
+  bt.disabled = true; bt.textContent = 'Localizando…';
+  lista.innerHTML = '<li class="perto-carregando"><span class="pulsando">📍</span> Procurando empresas por perto… pode levar até 1 minuto.</li>';
+  try {
+    let pos;
+    try { pos = await pegarPosicao(); } catch (e) {
+      throw new Error(e?.code === 1 ? 'Libere a localização: Ajustes do iPhone → Privacidade → Serviços de Localização → Safari/Segundo Cérebro.' : 'Não consegui pegar sua localização agora.');
+    }
+    guardado.gravar('cerebro-geo', '1'); iniciarGeo();
+    await enviarLocal(pos, true);
+    bt.textContent = 'Buscando…';
+    const segmento = $('#perto-seg').value.trim();
+    const r = await api('/proximas', { metodo: 'POST', corpo: { segmento } });
+    Geo.empresas = r.empresas || [];
+    mostrarOnde(r.local);
+    lista.innerHTML = Geo.empresas.length ? Geo.empresas.map((e, i) => `<li class="perto-item">
+        <div class="pi-corpo"><b>${esc(e.nome)}</b>
+          <span class="pi-meta">${esc(e.categoria || '')}${e.distancia_m != null ? ` · ${fmtDist(e.distancia_m)}` : e.fonte === 'web' ? ' · da web' : ''}</span>
+          ${e.endereco ? `<small>${esc(e.endereco)}</small>` : ''}${e.motivo ? `<small class="pi-motivo">${esc(e.motivo)}</small>` : ''}</div>
+        <div class="pi-acoes"><button class="btn mini roxo-btn" data-perto-oraculo="${i}">Oráculo</button>
+          ${e.lat || e.endereco ? `<a class="btn mini btn-waze" href="${esc(e.lat ? `https://waze.com/ul?ll=${e.lat},${e.lng}&navigate=yes` : linkWaze(e.endereco))}">Waze</a>` : ''}</div></li>`).join('')
+      : `<li class="vazio">Não achei empresas${segmento ? ` de "${esc(segmento)}"` : ''} por aqui. Tente outro segmento.</li>`;
+  } catch (err) { lista.innerHTML = ''; aviso(err.message); }
+  finally { bt.disabled = false; bt.textContent = 'Buscar aqui'; }
+}
+$('#form-perto').addEventListener('submit', (e) => { e.preventDefault(); buscarPerto(); });
+$('#perto-desligar').addEventListener('click', () => { guardado.gravar('cerebro-geo', null); pararGeo(); $('#perto-desligar').hidden = true; aviso('Localização desligada. Ligo de novo quando você buscar empresas por perto.'); });
+$('#oh-perto').addEventListener('click', () => { ir('oraculo'); setTimeout(() => { $('#form-perto').scrollIntoView({ behavior: 'smooth', block: 'start' }); buscarPerto(); }, 250); });
+$('#lista-perto').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-perto-oraculo]'); if (!b) return;
+  const em = Geo.empresas[Number(b.dataset.pertoOraculo)]; if (!em) return;
+  const onde = Geo.ultimo?.local;
+  b.disabled = true; b.textContent = '…';
+  try {
+    const cidade = onde?.cidade ? `, ${onde.cidade}${onde.uf ? `/${onde.uf}` : ''}` : '';
+    const { id } = await api('/dossies', { metodo: 'POST', corpo: { alvo: `${em.nome}${cidade}`, contexto: [`${em.categoria || ''} encontrada perto de mim`, em.endereco ? `Endereço: ${em.endereco}` : onde?.endereco ? `Perto de: ${onde.endereco}` : '', em.telefone ? `Telefone: ${em.telefone}` : '', em.site ? `Site: ${em.site}` : ''].filter(Boolean).join('. ') } });
+    ir(`dossie/${id}`);
+  } catch (err) { aviso(err.message); b.disabled = false; b.textContent = 'Oráculo'; }
+});
+iniciarGeo();
+
 function etapaAtual(d) {
   if (!d.cadastro) return 0;
   if (/mercado/i.test(d.etapa || '') && !/pesquisado/i.test(d.etapa || '')) return 1;
   if (/Mercado pesquisado|reputação e sinais/i.test(d.etapa || '')) return 2;
-  if (/Sinais financeiros pesquisados|Montando/i.test(d.etapa || '')) return 3;
+  if (/Sinais financeiros pesquisados|sócios e responsáveis/i.test(d.etapa || '')) return 3;
+  if (/Sócios pesquisados|Montando/i.test(d.etapa || '')) return 4;
   return 1;
 }
 
@@ -1387,9 +1478,9 @@ async function carregarDossie(id) {
     ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div class="ficha-item ${k === 'Atividade' ? 'largo' : ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '<p class="dica">CNPJ não identificado: dossiê feito só com o que é público na web.</p>'}
     ${blocoEnvio(d)}
     <nav class="segs" aria-label="Ir para">
-      ${[['abordagem', 'Abordagem'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg" data-dpane="${k}">${t}</button>`).join('')}
+      ${[['abordagem', 'Abordagem'], ['socios', 'Sócios'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg" data-dpane="${k}">${t}</button>`).join('')}
     </nav>
-    ${['abordagem', 'empresa', 'riscos', 'fontes'].map((k) => `<section class="secao-d" id="sec-${k}"><h2 class="titulo-sec">${{ abordagem: 'Abordagem', empresa: 'Empresa e mercado', riscos: 'Riscos e sinais financeiros', fontes: 'Fontes' }[k]}</h2>${paneDossie(d, k)}</section>`).join('')}
+    ${['abordagem', 'socios', 'empresa', 'riscos', 'fontes'].map((k) => `<section class="secao-d" id="sec-${k}"><h2 class="titulo-sec">${{ abordagem: 'Abordagem', socios: 'Sócios e responsáveis', empresa: 'Empresa e mercado', riscos: 'Riscos e sinais financeiros', fontes: 'Fontes' }[k]}</h2>${paneDossie(d, k)}</section>`).join('')}
     ${rodapeDossie()}`;
 }
 
@@ -1448,7 +1539,35 @@ function paneDossie(d, p) {
         ${m.concorrentes?.length ? `<p class="rot">Concorrentes</p><div class="chips">${chips(m.concorrentes)}</div>` : ''}</div>
       ${x.dores_segmento?.length ? `<div class="bloco-o"><h3>Dores do segmento</h3>${x.dores_segmento.map((dd) => `<div class="dor"><b>${esc(dd.dor)}</b>${dd.impacto ? `<span>${esc(dd.impacto)}</span>` : ''}</div>`).join('')}</div>` : ''}
       ${m.tendencias?.length ? `<div class="bloco-o"><h3>Tendências do setor</h3><ul class="marcadores">${lis(m.tendencias)}</ul></div>` : ''}
-      ${c?.socios?.length ? `<div class="bloco-o"><h3>Quadro societário</h3><ul class="marcadores">${c.socios.map((s) => `<li>${esc(s.nome)}${s.qualificacao ? ` · ${esc(s.qualificacao)}` : ''}</li>`).join('')}</ul></div>` : ''}`;
+`;
+  }
+  if (p === 'socios') {
+    const pessoas = Array.isArray(x.socios) ? x.socios : [];
+    if (!pessoas.length) {
+      return c?.socios?.length
+        ? `<div class="bloco-o"><h3>Quadro societário (Receita)</h3><ul class="marcadores">${c.socios.map((s) => `<li>${esc(s.nome)}${s.qualificacao ? ` · ${esc(s.qualificacao)}` : ''}</li>`).join('')}</ul>
+           <p class="dica">Este dossiê é anterior à pesquisa de perfil dos sócios. Toque em "Pesquisar de novo" para incluir.</p></div>`
+        : '<div class="bloco-o"><p>Não encontrei sócios ou responsáveis em fontes públicas.</p></div>';
+    }
+    const PAPEL = { decisor: ['Decide', 'verde'], influencia: ['Influencia', 'azul'], investidor: ['Investidor', 'cinza'], indefinido: ['Papel incerto', 'cinza'] };
+    return `${x.quem_decide ? `<div class="quem-decide"><span class="ic verde"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><p><b>Com quem falar</b>${esc(x.quem_decide)}</p></div>` : ''}
+      ${pessoas.map((pe) => {
+        const [pt, pc] = PAPEL[pe.papel] || PAPEL.indefinido;
+        const fontes = (pe.fontes || []).filter((u) => /^https?:/.test(u));
+        return `<article class="socio">
+          <header class="socio-topo"><span class="avatar-p roxo">${esc(iniciais(pe.nome))}</span>
+            <div><b>${esc(pe.nome)}</b><span>${esc([pe.cargo, pe.desde ? `desde ${pe.desde}` : ''].filter(Boolean).join(' · '))}</span></div>
+            <i class="selo ${pc}">${pt}</i></header>
+          ${pe.confirmado === false ? '<p class="dica nao-conf">Perfil público não confirmado: pode haver homônimos.</p>' : ''}
+          ${pe.perfil ? `<p>${esc(pe.perfil)}</p>` : ''}
+          ${pe.trajetoria ? `<p class="rot">Trajetória</p><p>${esc(pe.trajetoria)}</p>` : ''}
+          ${pe.outras_empresas?.length ? `<p class="rot">Outras empresas</p><div class="chips">${pe.outras_empresas.map((t) => `<span class="chip-o">${esc(t)}</span>`).join('')}</div>` : ''}
+          ${pe.interesses?.length ? `<p class="rot">Valoriza</p><div class="chips">${pe.interesses.map((t) => `<span class="chip-o verde">${esc(t)}</span>`).join('')}</div>` : ''}
+          ${pe.como_abordar ? `<div class="como-abordar"><b>Como abordar</b><p>${esc(pe.como_abordar)}</p></div>` : ''}
+          ${fontes.length ? `<div class="socio-fontes">${fontes.slice(0, 4).map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(dominio(u))} ›</a>`).join('')}</div>` : ''}
+        </article>`;
+      }).join('')}
+      <p class="dica">Só perfil profissional público. Dados pessoais (CPF, endereço, família) ficam de fora.</p>`;
   }
   if (p === 'riscos') {
     const f = x.financeiro || {};

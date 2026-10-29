@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
   <!-- Primeiro acesso -->
@@ -69,6 +69,7 @@
           <button type="button" class="oh-mic" data-voz-oraculo aria-label="Pesquisar por voz"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg></button>
           <button class="oh-botao" id="oraculo-hoje-btn">Pesquisar</button>
         </div>
+        <button type="button" class="oh-perto" id="oh-perto"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>Empresas perto de mim</button>
       </form>
 
       <article id="ancora" class="ancora" hidden>
@@ -253,6 +254,18 @@
         <div class="acoes"><button type="button" class="btn claro voz-o" data-voz-oraculo><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg>Falar</button><button class="btn primario" id="oraculo-enviar">Pesquisar</button></div>
         <p class="dica centro">Toque em Falar e diga a empresa e o que quer saber. Leva de 3 a 6 minutos; eu aviso quando ficar pronto.</p>
       </form>
+      <section class="perto">
+        <div class="perto-topo">
+          <span class="ic verde"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg></span>
+          <div><b>Empresas perto de você</b><p id="perto-onde" class="dica">Usa sua localização atual para achar prospects na região.</p></div>
+        </div>
+        <form id="form-perto" class="perto-busca">
+          <input id="perto-seg" placeholder="Segmento (opcional): padaria, farmácia…" autocomplete="off" enterkeyhint="search">
+          <button class="btn primario" id="perto-btn">Buscar aqui</button>
+        </form>
+        <ul id="lista-perto" class="perto-lista"></ul>
+        <button type="button" class="link perto-desligar" id="perto-desligar" hidden>Desligar localização</button>
+      </section>
       <h2 class="secao">Dossiês</h2>
       <ul id="lista-dossies" class="lista cartao-lista"></ul>
     </section>
@@ -308,6 +321,6 @@
     </form>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=14" type="module"></script>
+  <script src="app.js?v=15" type="module"></script>
 </body>
 </html>
