@@ -1256,6 +1256,43 @@ async function carregarOraculo() {
     : '<li><p class="vazio">Nenhum dossiê ainda. Pesquise o primeiro cliente acima.</p></li>';
 }
 
+// Oráculo por voz: toque para falar, toque de novo para enviar (para sozinho em 25 s).
+const VozO = { mr: null, stream: null, pedacos: [], timer: null, enviando: false };
+function marcarVoz(estado) {
+  document.querySelectorAll('[data-voz-oraculo]').forEach((b) => { b.classList.toggle('ouvindo', estado === 'ouvindo'); b.classList.toggle('enviando', estado === 'enviando'); });
+  const campo = $('#oraculo-hoje-alvo');
+  campo.placeholder = estado === 'ouvindo' ? 'Ouvindo… fale agora' : estado === 'enviando' ? 'Entendendo…' : 'Nome ou CNPJ da empresa';
+}
+async function vozOraculo() {
+  if (VozO.enviando) return;
+  if (VozO.mr && VozO.mr.state === 'recording') { VozO.mr.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { aviso('Este aparelho não grava áudio pelo app.'); return; }
+  try { VozO.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+  catch { aviso('Libere o microfone para o app nos Ajustes do iPhone.'); return; }
+  const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+  VozO.pedacos = [];
+  VozO.mr = new MediaRecorder(VozO.stream, tipo ? { mimeType: tipo } : undefined);
+  VozO.mr.ondataavailable = (ev) => ev.data.size && VozO.pedacos.push(ev.data);
+  VozO.mr.onstop = async () => {
+    clearTimeout(VozO.timer);
+    VozO.stream.getTracks().forEach((t) => t.stop());
+    const mime = (VozO.mr.mimeType || 'audio/mp4').split(';')[0];
+    const audio = new Blob(VozO.pedacos, { type: mime });
+    VozO.enviando = true; marcarVoz('enviando');
+    try {
+      const r = await api('/dossies/voz', { metodo: 'POST', corpo: audio, tipo: mime });
+      aviso(`Pesquisando: ${r.alvo}`);
+      ir(`dossie/${r.id}`);
+    } catch (err) { aviso(err.message); }
+    finally { VozO.enviando = false; marcarVoz(''); }
+  };
+  VozO.mr.start();
+  marcarVoz('ouvindo');
+  if (navigator.vibrate) navigator.vibrate(30);
+  VozO.timer = setTimeout(() => VozO.mr?.state === 'recording' && VozO.mr.stop(), 25000);
+}
+document.addEventListener('click', (e) => { if (e.target.closest('[data-voz-oraculo]')) { e.preventDefault(); vozOraculo(); } });
+
 // Cartão do Oráculo na tela Hoje: pesquisa direto daqui e abre a tela da pesquisa.
 $('#oraculo-hoje').addEventListener('submit', async (e) => {
   e.preventDefault();
