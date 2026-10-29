@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Segundo Cérebro</title>
   <meta name="description" content="Seu segundo cérebro: conversa, gravador de reuniões, WhatsApp, agenda e lembretes num lugar só.">
-  <meta name="theme-color" content="#1F5F5B">
+  <meta name="theme-color" content="#F4F5F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E1116" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -14,7 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -34,16 +35,51 @@
   <main id="app" hidden>
     <!-- Hoje -->
     <section id="v-hoje" class="vista" data-titulo="Hoje">
-      <header class="topo">
-        <p id="hoje-data" class="data"></p>
-        <h1 id="hoje-saudacao">Bom dia</h1>
+      <header class="cabeca">
+        <div>
+          <p id="hoje-saudacao" class="saudacao">Bom dia, Michelder</p>
+          <h1 id="hoje-data" class="titulo-dia">Hoje</h1>
+        </div>
+        <button class="avatar" data-ir="mais" aria-label="Avisos e ajustes">M</button>
       </header>
+
+      <div class="semana-cab">
+        <button id="sem-ant" class="seta" aria-label="Semana anterior"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <p id="sem-mes" class="sem-mes"></p>
+        <button id="sem-prox" class="seta" aria-label="Próxima semana"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div id="semana" class="semana" role="tablist" aria-label="Dias da semana"></div>
+
+      <div class="atalhos">
+        <button class="atalho" data-acao="evento"><span class="ic verde"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg></span>Compromisso</button>
+        <button class="atalho" data-acao="lembrete"><span class="ic ambar"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg></span>Lembrete</button>
+        <button class="atalho" data-ir="gravar"><span class="ic vermelho"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg></span>Gravar</button>
+        <button class="atalho" data-acao="dimy"><span class="ic azul"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4L12 3Zm6 11 .9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9L18 14Z"/></svg></span>Dimy</button>
+      </div>
+
       <article id="ancora" class="ancora" hidden>
-        <p class="ancora-rotulo">Uma coisa agora</p>
-        <p id="ancora-texto" class="ancora-texto"></p>
-        <button id="ancora-acao" class="btn claro" hidden></button>
+        <span class="ancora-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <div class="ancora-corpo">
+          <p class="ancora-rotulo">Agora</p>
+          <p id="ancora-texto" class="ancora-texto"></p>
+        </div>
+        <button id="ancora-acao" class="ancora-btn" hidden></button>
       </article>
-      <div id="hoje-blocos"></div>
+
+      <section class="bloco">
+        <div class="bloco-cab"><h2 id="agenda-titulo">Agenda de hoje</h2><button class="mais-btn" data-acao="evento" aria-label="Novo compromisso"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+        <div id="linha-tempo" class="linha-tempo"></div>
+      </section>
+
+      <section class="bloco" id="bloco-lembretes">
+        <div class="bloco-cab"><h2>Lembretes</h2><button class="mais-btn" data-acao="lembrete" aria-label="Novo lembrete"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+        <div id="lista-lembretes" class="carrossel"></div>
+      </section>
+
+      <section class="bloco" id="bloco-espera" hidden>
+        <div class="bloco-cab"><h2>Esperando sua resposta</h2></div>
+        <ul id="lista-espera" class="lista cartao-lista"></ul>
+      </section>
     </section>
 
     <!-- Conversa -->
@@ -209,6 +245,17 @@
   </main>
 
   <button id="pilula-gravando" class="pilula" data-ir="gravando" hidden><span class="ponto"></span><span id="pilula-tempo">Gravando</span></button>
+  <div id="folha" class="folha" hidden>
+    <div class="folha-fundo" data-fechar></div>
+    <form id="folha-form" class="folha-painel" novalidate>
+      <div class="folha-alca"></div>
+      <h2 id="folha-titulo">Compromisso</h2>
+      <div id="folha-campos" class="campos"></div>
+      <p id="folha-erro" class="erro" role="alert"></p>
+      <button type="submit" class="btn primario largo" id="folha-salvar">Salvar</button>
+      <button type="button" class="link perigo" id="folha-apagar" hidden>Apagar</button>
+    </form>
+  </div>
   <div id="toast" class="toast" role="status" hidden></div>
   <script src="app.js" type="module"></script>
 </body>

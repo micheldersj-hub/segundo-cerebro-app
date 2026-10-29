@@ -104,10 +104,23 @@ function escolherAncora(d) {
   return { texto: 'Nada pedindo você agora. Se quiser, me conta como está o dia.', acao: 'Conversar', ir: 'conversa' };
 }
 
+// ---- Datas no fuso de São Paulo ----
+const TZ = 'America/Sao_Paulo';
+const diaISO = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d instanceof Date ? d : new Date(d));
+const horaISO = (d) => new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d instanceof Date ? d : new Date(d));
+const montarISO = (dia, hm) => `${dia}T${hm}:00-03:00`;
+const somaDias = (dia, n) => diaISO(new Date(Date.parse(`${dia}T12:00:00-03:00`) + n * 864e5));
+const diaSemana = (dia) => new Date(`${dia}T12:00:00-03:00`).getUTCDay(); // 0 = domingo
+const nomeDia = (dia, opts) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ, ...opts });
+
+const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true };
+function inicioDaSemana(dia) { return somaDias(dia, -((diaSemana(dia) + 6) % 7)); } // segunda-feira
+
 async function carregarHoje() {
   $('#hoje-saudacao').textContent = saudacao();
-  $('#hoje-data').textContent = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' });
-  const d = await api('/hoje');
+  const hoje = diaISO(new Date());
+  $('#hoje-data').textContent = nomeDia(hoje, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  const [d] = await Promise.all([api('/hoje'), carregarSemana()]);
   atualizarBadges(d);
 
   const a = escolherAncora(d);
@@ -117,25 +130,194 @@ async function carregarHoje() {
   bt.hidden = !a.acao; bt.textContent = a.acao || '';
   bt.onclick = () => a.ir && ir(a.ir);
 
-  const blocos = [];
-  // Agenda
-  if (d.google) {
-    const ev = Array.isArray(d.agenda) ? d.agenda : [];
-    blocos.push(`<div class="bloco"><h2>Agenda de hoje</h2>${ev.length
-      ? `<ul class="lista agenda">${ev.map((e) => `<li><div class="item"><span class="h">${hora(e.inicio)}</span><span class="t">${esc(e.titulo)}</span>${e.local ? `<span class="d">${esc(e.local)}</span>` : ''}</div></li>`).join('')}</ul>`
-      : `<p class="vazio">${d.agenda?.erro ? 'Não consegui ler a agenda agora.' : 'Nenhum compromisso pelo resto do dia.'}</p>`}</div>`);
-  } else {
-    blocos.push(`<div class="bloco"><h2>Agenda de hoje</h2><p class="vazio">Conecte o Google em Avisos → Ajustes para eu ver sua agenda.</p></div>`);
+  // Lembretes: cartões com sino e horário (toque para mudar data e hora)
+  const lem = d.lembretes || [];
+  $('#lista-lembretes').innerHTML = lem.length
+    ? lem.map((l) => `<button class="lembrete" data-lembrete="${esc(l.id)}" data-texto="${esc(l.text)}" data-quando="${esc(l.due_at)}">
+        <span class="lembrete-ic"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg></span>
+        <span class="lembrete-t">${esc(l.text)}</span>
+        <span class="pilula-hora"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${quandoCurto(l.due_at)}</span></button>`).join('')
+    : '<button class="vazio-cartao" data-acao="lembrete"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Criar um lembrete</button>';
+
+  const esp = d.aguardando || [];
+  $('#bloco-espera').hidden = !esp.length;
+  $('#lista-espera').innerHTML = esp.slice(0, 6).map((c) => `<li><button class="pessoa" data-ir="contato/${esc(c.wa_id)}">
+      <span class="avatar-p">${esc(iniciais(nomeDe(c)))}</span>
+      <span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}</span><span class="d">${esc(c.last_summary || 'Mensagem nova')}</span></span>
+      <span class="h">${quando(c.last_in_at || c.last_seen)}</span></button></li>`).join('');
+}
+
+const iniciais = (n) => n.replace(/^\+/, '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '•';
+function quandoCurto(iso) {
+  const dia = diaISO(iso), hoje = diaISO(new Date());
+  const rot = dia === hoje ? 'Hoje' : dia === somaDias(hoje, 1) ? 'Amanhã' : nomeDia(dia, { day: '2-digit', month: 'short' }).replace('.', '');
+  return `${rot}, ${horaISO(iso)}`;
+}
+
+async function carregarSemana() {
+  const ini = inicioDaSemana(Agenda.dia);
+  if (ini !== Agenda.inicioSemana) {
+    Agenda.inicioSemana = ini;
+    try {
+      const r = await api(`/agenda?de=${ini}&dias=7`);
+      Agenda.google = r.google; Agenda.eventos = r.eventos;
+    } catch (e) { Agenda.eventos = []; aviso(`Agenda: ${e.message}`); }
   }
-  // Esperando resposta
-  blocos.push(`<div class="bloco"><h2>Esperando sua resposta</h2>${d.aguardando.length
-    ? `<ul class="lista">${d.aguardando.slice(0, 6).map((c) => `<li><button class="item espera" data-ir="contato/${esc(c.wa_id)}"><span class="t">${esc(nomeDe(c))}</span><span class="h">${quando(c.last_in_at || c.last_seen)}</span><span class="d">${esc(c.last_summary || '')}</span></button></li>`).join('')}</ul>`
-    : '<p class="vazio">Ninguém esperando. Bom sinal.</p>'}</div>`);
-  // Lembretes
-  if (d.lembretes.length) {
-    blocos.push(`<div class="bloco"><h2>Lembretes</h2><ul class="lista">${d.lembretes.slice(0, 5).map((l) => `<li><div class="item"><span class="t">${esc(l.text)}</span><span class="h">${quando(l.due_at)}</span></div></li>`).join('')}</ul></div>`);
+  desenharSemana(); desenharLinhaTempo();
+}
+
+function desenharSemana() {
+  const ini = Agenda.inicioSemana, hoje = diaISO(new Date());
+  const meio = somaDias(ini, 3);
+  $('#sem-mes').textContent = nomeDia(meio, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
+  const letras = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+  $('#semana').innerHTML = Array.from({ length: 7 }, (_, k) => {
+    const dia = somaDias(ini, k);
+    const n = Agenda.eventos.filter((e) => diaISO(e.inicio) === dia).length;
+    return `<button class="dia ${dia === Agenda.dia ? 'sel' : ''} ${dia === hoje ? 'hoje' : ''}" data-dia="${dia}" role="tab" aria-selected="${dia === Agenda.dia}">
+      <span class="dia-l">${letras[k]}</span><span class="dia-n">${Number(dia.slice(8))}</span><span class="pontos">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
+  }).join('');
+}
+
+function desenharLinhaTempo() {
+  const hoje = diaISO(new Date()), dia = Agenda.dia;
+  $('#agenda-titulo').textContent = dia === hoje ? 'Agenda de hoje' : dia === somaDias(hoje, 1) ? 'Agenda de amanhã' : nomeDia(dia, { weekday: 'long', day: 'numeric', month: 'short' }).replace(/^./, (c) => c.toUpperCase());
+  const box = $('#linha-tempo');
+  if (!Agenda.google) { box.innerHTML = '<p class="vazio">Conecte o Google em Avisos → Ajustes para ver sua agenda.</p>'; return; }
+  const evs = Agenda.eventos.filter((e) => diaISO(e.inicio) === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
+  if (!evs.length) {
+    box.innerHTML = `<button class="vazio-cartao grande" data-acao="evento"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Dia livre<small>Toque para marcar um compromisso</small></span></button>`;
+    return;
   }
-  $('#hoje-blocos').innerHTML = blocos.join('');
+  const agora = Date.now();
+  let marcouAgora = dia !== hoje;
+  const cores = ['c-verde', 'c-azul', 'c-roxo', 'c-ambar', 'c-rosa'];
+  box.innerHTML = evs.map((e, k) => {
+    let linha = '';
+    if (!marcouAgora && Date.parse(e.inicio) > agora) { marcouAgora = true; linha = `<div class="agora-linha"><span>${horaISO(new Date())}</span></div>`; }
+    const passou = e.fim && Date.parse(e.fim) < agora;
+    const hora = e.dia_inteiro ? 'Dia todo' : `${horaISO(e.inicio)}${e.fim ? ` – ${horaISO(e.fim)}` : ''}`;
+    return `${linha}<div class="evento ${passou ? 'passou' : ''}">
+      <div class="ev-hora">${e.dia_inteiro ? '•' : horaISO(e.inicio)}</div>
+      <button class="ev-cartao ${cores[k % cores.length]}" data-evento="${esc(e.id)}">
+        <span class="ev-t">${esc(e.titulo)}</span>
+        <span class="ev-meta"><span class="pilula-hora"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${hora}</span>${e.local ? `<span class="ev-local"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>${esc(e.local)}</span>` : ''}</span>
+        <span class="ev-editar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/></svg></span>
+      </button></div>`;
+  }).join('') + (!marcouAgora ? `<div class="agora-linha"><span>${horaISO(new Date())}</span></div>` : '');
+}
+
+document.addEventListener('click', async (e) => {
+  const d = e.target.closest('.dia[data-dia]');
+  if (d) { Agenda.dia = d.dataset.dia; desenharSemana(); desenharLinhaTempo(); return; }
+  const ev = e.target.closest('[data-evento]');
+  if (ev) { const x = Agenda.eventos.find((i) => i.id === ev.dataset.evento); if (x) editarEvento(x); return; }
+  const lb = e.target.closest('[data-lembrete]');
+  if (lb) { editarLembrete({ id: lb.dataset.lembrete, text: lb.dataset.texto, due_at: lb.dataset.quando }); return; }
+  const ac = e.target.closest('[data-acao]');
+  if (ac) {
+    if (ac.dataset.acao === 'evento') editarEvento(null);
+    if (ac.dataset.acao === 'lembrete') editarLembrete(null);
+    if (ac.dataset.acao === 'dimy') { ir('conversa'); setTimeout(() => !Dimy.ligado && ligarDimy(), 300); }
+  }
+});
+$('#sem-ant').addEventListener('click', () => { Agenda.dia = somaDias(Agenda.inicioSemana, -7); carregarSemana(); });
+$('#sem-prox').addEventListener('click', () => { Agenda.dia = somaDias(Agenda.inicioSemana, 7); carregarSemana(); });
+
+// ---------------------------------------------------------------------------
+// Folha de edição: calendário (data) e relógio (hora) nativos do iPhone
+// ---------------------------------------------------------------------------
+const IC_CAL = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+const IC_REL = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+let folhaAcao = null;
+
+function abrirFolha({ titulo, campos, salvar, apagar }) {
+  $('#folha-titulo').textContent = titulo;
+  $('#folha-campos').innerHTML = campos.map((c) => {
+    if (c.tipo === 'data-hora') {
+      return `<div class="linha-campos">
+        <label class="campo ic-campo"><span>${IC_CAL}${c.rotuloData || 'Data'}</span><input type="date" name="${c.data}" value="${esc(c.vData)}" required></label>
+        <label class="campo ic-campo"><span>${IC_REL}${c.rotuloHora || 'Hora'}</span><input type="time" name="${c.hora}" value="${esc(c.vHora)}" required></label>
+        ${c.hora2 ? `<label class="campo ic-campo"><span>${IC_REL}Até</span><input type="time" name="${c.hora2}" value="${esc(c.vHora2)}"></label>` : ''}
+      </div>`;
+    }
+    return `<label class="campo"><span>${c.rotulo}</span><input name="${c.nome}" value="${esc(c.valor || '')}" placeholder="${esc(c.placeholder || '')}" ${c.obrigatorio ? 'required' : ''} autocomplete="off"></label>`;
+  }).join('');
+  $('#folha-erro').textContent = '';
+  $('#folha-apagar').hidden = !apagar;
+  $('#folha-apagar').onclick = apagar ? async () => { if (confirm('Apagar mesmo?')) { try { await apagar(); fecharFolha(); } catch (err) { $('#folha-erro').textContent = err.message; } } } : null;
+  folhaAcao = salvar;
+  $('#folha').hidden = false;
+  requestAnimationFrame(() => $('#folha').classList.add('aberta'));
+}
+function fecharFolha() { $('#folha').classList.remove('aberta'); setTimeout(() => ($('#folha').hidden = true), 220); }
+$('#folha').addEventListener('click', (e) => { if (e.target.closest('[data-fechar]')) fecharFolha(); });
+$('#folha-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const dados = Object.fromEntries(new FormData(e.currentTarget));
+  const b = $('#folha-salvar'); b.disabled = true; b.textContent = 'Salvando…';
+  try { await folhaAcao(dados); fecharFolha(); }
+  catch (err) { $('#folha-erro').textContent = err.message; }
+  finally { b.disabled = false; b.textContent = 'Salvar'; }
+});
+
+function proximaHoraCheia() { const d = new Date(Date.now() + 3600e3); d.setMinutes(0); return horaISO(d); }
+
+function editarEvento(ev) {
+  const dia = ev ? diaISO(ev.inicio) : Agenda.dia;
+  const ini = ev && !ev.dia_inteiro ? horaISO(ev.inicio) : proximaHoraCheia();
+  const fim = ev && ev.fim && !ev.dia_inteiro ? horaISO(ev.fim) : horaISO(new Date(Date.parse(montarISO(dia, ini)) + 3600e3));
+  abrirFolha({
+    titulo: ev ? 'Editar compromisso' : 'Novo compromisso',
+    campos: [
+      { rotulo: 'O quê', nome: 'titulo', valor: ev?.titulo, placeholder: 'Visita – cliente', obrigatorio: true },
+      { tipo: 'data-hora', data: 'dia', hora: 'inicio', hora2: 'fim', vData: dia, vHora: ini, vHora2: fim, rotuloHora: 'Início' },
+      { rotulo: 'Onde', nome: 'local', valor: ev?.local, placeholder: 'Opcional' },
+    ],
+    salvar: async (f) => {
+      if (!f.titulo?.trim() || !f.dia || !f.inicio) throw new Error('Preencha o quê, o dia e a hora.');
+      let fimISO = montarISO(f.dia, f.fim || f.inicio);
+      if (!f.fim || Date.parse(fimISO) <= Date.parse(montarISO(f.dia, f.inicio))) fimISO = new Date(Date.parse(montarISO(f.dia, f.inicio)) + 3600e3).toISOString();
+      const corpo = { titulo: f.titulo.trim(), inicio: montarISO(f.dia, f.inicio), fim: fimISO, local: f.local?.trim() || '' };
+      await api(ev ? `/agenda/${encodeURIComponent(ev.id)}` : '/agenda', { metodo: 'POST', corpo });
+      aviso(ev ? 'Compromisso atualizado.' : 'Compromisso marcado. O alarme toca 20 min antes.');
+      Agenda.dia = f.dia; Agenda.inicioSemana = null; await carregarSemana();
+    },
+    apagar: ev ? async () => { await api(`/agenda/${encodeURIComponent(ev.id)}/apagar`, { metodo: 'POST' }); aviso('Compromisso apagado.'); Agenda.inicioSemana = null; await carregarSemana(); } : null,
+  });
+}
+
+function editarLembrete(l, sugestao) {
+  const quando = l ? new Date(l.due_at) : null;
+  abrirFolha({
+    titulo: l ? 'Editar lembrete' : 'Novo lembrete',
+    campos: [
+      { rotulo: 'Lembrar de', nome: 'texto', valor: l?.text ?? sugestao?.texto, placeholder: 'Ligar para o cliente', obrigatorio: true },
+      { tipo: 'data-hora', data: 'dia', hora: 'hora', vData: quando ? diaISO(quando) : sugestao?.dia || Agenda.dia, vHora: quando ? horaISO(quando) : sugestao?.hora || proximaHoraCheia() },
+    ],
+    salvar: async (f) => {
+      if (!f.texto?.trim() || !f.dia || !f.hora) throw new Error('Preencha o texto, o dia e a hora.');
+      const corpo = { texto: f.texto.trim(), quando: montarISO(f.dia, f.hora) };
+      await api(l ? `/lembretes/${encodeURIComponent(l.id)}` : '/lembretes', { metodo: 'POST', corpo });
+      aviso(l ? 'Lembrete atualizado.' : 'Lembrete criado.');
+      if (!$('#v-hoje').hidden) carregarHoje();
+    },
+    apagar: l ? async () => { await api(`/lembretes/${encodeURIComponent(l.id)}/cancelar`, { metodo: 'POST' }); aviso('Lembrete cancelado.'); carregarHoje(); } : null,
+  });
+}
+
+// "sexta", "amanhã", "até 10/11", "semana que vem" → dia sugerido para agendar uma ação
+function sugerirDia(prazo) {
+  const hoje = diaISO(new Date());
+  const t = (prazo || '').toLowerCase();
+  const m = t.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (m) { const ano = m[3] ? (m[3].length === 2 ? '20' + m[3] : m[3]) : hoje.slice(0, 4); return `${ano}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }
+  if (/amanh/.test(t)) return somaDias(hoje, 1);
+  if (/hoje/.test(t)) return hoje;
+  if (/semana que vem|pr[oó]xima semana/.test(t)) return somaDias(inicioDaSemana(hoje), 7);
+  const dias = ['domingo', 'segunda', 'terça|terca', 'quarta', 'quinta', 'sexta', 's[aá]bado'];
+  for (let k = 0; k < 7; k++) if (new RegExp(dias[k]).test(t)) { const delta = (k - diaSemana(hoje) + 7) % 7 || 7; return somaDias(hoje, delta); }
+  return somaDias(hoje, 1);
 }
 
 function atualizarBadges(d) {
@@ -811,7 +993,7 @@ function renderResumo(g) {
   const notas = (g.anexos || []).filter((a) => a.tipo !== 'foto');
   $('#pane-resumo').innerHTML = `
     ${s.resumo ? `<p class="resumo-texto">${leve(s.resumo)}</p>` : ''}
-    ${acoes.length ? `<h3>Plano de ação</h3><ul class="acoes-lista">${acoes.map((a) => `<li class="${a.eh_michelder ? 'minha' : ''}"><span class="t">${leve(a.tarefa)}</span><span class="d">${esc([a.responsavel, a.prazo].filter(Boolean).join(' · '))}${a.eh_michelder ? ' <em class="etiqueta">sua</em>' : ''}</span></li>`).join('')}</ul>
+    ${acoes.length ? `<h3>Plano de ação</h3><ul class="acoes-lista">${acoes.map((a, k) => `<li class="${a.eh_michelder ? 'minha' : ''}"><span class="t">${leve(a.tarefa)}</span><span class="d">${esc(a.responsavel || '')}${a.eh_michelder ? ' <em class="etiqueta">sua</em>' : ''}</span><button class="agendar" data-agendar="${k}" aria-label="Agendar no calendário"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>${esc(a.prazo || 'Agendar')}</button></li>`).join('')}</ul>
       ${acoes.some((a) => a.eh_michelder) ? '<button id="b-lembretes" class="btn claro">Transformar as minhas ações em lembretes</button>' : ''}` : ''}
     ${s.decisoes?.length ? `<h3>Decisões</h3>${lista(s.decisoes)}` : ''}
     ${(s.secoes_extra || []).map((x) => `<h3>${esc(x.titulo)}</h3><p class="pre">${leve(x.conteudo)}</p>`).join('')}
@@ -822,6 +1004,10 @@ function renderResumo(g) {
     ${fotos.length ? `<h3>Fotos</h3><div class="fotos">${fotos.map((f) => `<figure>${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="${esc(f.texto || 'Foto da gravação')}" loading="lazy"></a>` : ''}<figcaption>${f.em != null ? `<button class="tempo" data-t="${f.em}">${mmss(f.em)}</button> ` : ''}${esc(f.leitura || 'Lendo a foto…')}</figcaption></figure>`).join('')}</div>` : ''}
     ${notas.length ? `<h3>Notas e destaques</h3><ul class="marcadores">${notas.map((n) => `<li>${n.em != null ? `<button class="tempo" data-t="${n.em}">${mmss(n.em)}</button> ` : ''}${n.tipo === 'destaque' ? '★ ' : ''}${esc(n.texto || 'Momento importante')}</li>`).join('')}</ul>` : ''}
     ${s.partes_com_erro ? `<p class="dica">${s.partes_com_erro} parte(s) do áudio não puderam ser transcritas.</p>` : ''}`;
+  document.querySelectorAll('[data-agendar]').forEach((b) => b.addEventListener('click', () => {
+    const a = acoes[Number(b.dataset.agendar)];
+    editarLembrete(null, { texto: a.tarefa, dia: sugerirDia(a.prazo), hora: '09:00' });
+  }));
   $('#b-lembretes')?.addEventListener('click', () => {
     sessionStorage.setItem('cerebro-enviar', `Crie lembretes para as ações que são minhas na gravação "${g.title}" (id ${g.id}), usando os prazos combinados. Se faltar data, me pergunte.`);
     ir('conversa');
