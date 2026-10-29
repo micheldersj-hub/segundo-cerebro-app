@@ -1,6 +1,7 @@
 // Service worker do Segundo Cérebro: guarda a "casca" do app e recebe notificações push.
-const CACHE = 'cerebro-v6';
-const SHELL = ['./', './index.html', './app.js', './style.css', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
+const CACHE = 'cerebro-v7';
+const V = '?v=7';
+const SHELL = ['./', './index.html', './app.js' + V, './style.css' + V, './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -17,8 +18,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    // no-cache: sempre confere com o servidor, para nunca misturar arquivos velhos e novos.
+    fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' })
       .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
         return res;

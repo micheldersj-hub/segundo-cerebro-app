@@ -1216,7 +1216,7 @@ function iniciar() {
   rota();
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 // Ao voltar para o app, atualiza a tela atual.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && chave) rota(); });
 
