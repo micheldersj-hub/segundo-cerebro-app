@@ -51,7 +51,7 @@ const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
   whats: '#v-whats', contato: '#v-contato', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie',
 };
-const ABA_DE = { contato: 'whats', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje' };
+const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje' };
 
 function ir(destino) { location.hash = destino; }
 
@@ -1383,6 +1383,19 @@ function mostrarOnde(local) {
   $('#perto-desligar').hidden = !geoLigado();
 }
 
+function mostrarPerto(r, segmento = '') {
+  const lista = $('#lista-perto');
+  Geo.empresas = r.empresas || [];
+  mostrarOnde(r.local);
+  lista.innerHTML = Geo.empresas.length ? Geo.empresas.map((e, i) => `<li class="perto-item">
+      <div class="pi-corpo"><b>${esc(e.nome)}</b>
+        <span class="pi-meta">${esc(e.categoria || '')}${e.distancia_m != null ? ` · ${fmtDist(e.distancia_m)}` : e.fonte === 'web' ? ' · da web' : ''}</span>
+        ${e.endereco ? `<small>${esc(e.endereco)}</small>` : ''}${e.motivo ? `<small class="pi-motivo">${esc(e.motivo)}</small>` : ''}</div>
+      <div class="pi-acoes"><button class="btn mini roxo-btn" data-perto-oraculo="${i}">Oráculo</button>
+        ${e.lat || e.endereco ? `<a class="btn mini btn-waze" href="${esc(e.lat ? `https://waze.com/ul?ll=${e.lat},${e.lng}&navigate=yes` : linkWaze(e.endereco))}">Waze</a>` : ''}</div></li>`).join('')
+    : `<li class="vazio">Não achei empresas${segmento ? ` de "${esc(segmento)}"` : ''} por aqui. Tente outro segmento.</li>`;
+}
+
 async function buscarPerto() {
   if (!navigator.geolocation) { aviso('Este aparelho não informa a localização.'); return; }
   const bt = $('#perto-btn'), lista = $('#lista-perto');
@@ -1398,15 +1411,7 @@ async function buscarPerto() {
     bt.textContent = 'Buscando…';
     const segmento = $('#perto-seg').value.trim();
     const r = await api('/proximas', { metodo: 'POST', corpo: { segmento } });
-    Geo.empresas = r.empresas || [];
-    mostrarOnde(r.local);
-    lista.innerHTML = Geo.empresas.length ? Geo.empresas.map((e, i) => `<li class="perto-item">
-        <div class="pi-corpo"><b>${esc(e.nome)}</b>
-          <span class="pi-meta">${esc(e.categoria || '')}${e.distancia_m != null ? ` · ${fmtDist(e.distancia_m)}` : e.fonte === 'web' ? ' · da web' : ''}</span>
-          ${e.endereco ? `<small>${esc(e.endereco)}</small>` : ''}${e.motivo ? `<small class="pi-motivo">${esc(e.motivo)}</small>` : ''}</div>
-        <div class="pi-acoes"><button class="btn mini roxo-btn" data-perto-oraculo="${i}">Oráculo</button>
-          ${e.lat || e.endereco ? `<a class="btn mini btn-waze" href="${esc(e.lat ? `https://waze.com/ul?ll=${e.lat},${e.lng}&navigate=yes` : linkWaze(e.endereco))}">Waze</a>` : ''}</div></li>`).join('')
-      : `<li class="vazio">Não achei empresas${segmento ? ` de "${esc(segmento)}"` : ''} por aqui. Tente outro segmento.</li>`;
+    mostrarPerto(r, segmento);
   } catch (err) { lista.innerHTML = ''; aviso(err.message); }
   finally { bt.disabled = false; bt.textContent = 'Buscar aqui'; }
 }
@@ -1644,3 +1649,196 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { 
 document.addEventListener('visibilitychange', () => { if (!document.hidden && chave) rota(); });
 
 if (chave) iniciar(); else $('#entrar').hidden = false;
+
+
+// ---------------------------------------------------------------------------
+// Comando de voz: botão do centro da barra. Toque = fala e para sozinho no silêncio;
+// segurar = fala enquanto segura e envia ao soltar. O Dimy executa e o app abre a tela certa.
+// ---------------------------------------------------------------------------
+const Voz = { estado: 'parado', stream: null, mr: null, pedacos: [], ctx: null, an: null, raf: 0, inicio: 0, falou: false, ultimaFala: 0, base: 0.006, apertou: 0, segurando: false, seguir: false, acoes: [] };
+const VOZ_LIMITE_MS = 40000, VOZ_SILENCIO_MS = 1300, VOZ_ESPERA_MS = 7000;
+
+function vozUI(estado, texto) {
+  Voz.estado = estado;
+  const painel = $('#voz');
+  painel.dataset.estado = estado;
+  $('#b-comando-voz').classList.toggle('ouvindo', estado === 'ouvindo');
+  if (texto != null) $('#voz-estado').textContent = texto;
+}
+
+function abrirVoz() {
+  const el = $('#voz');
+  if (!el.hidden) return;
+  el.hidden = false;
+  $('#voz-ouvido').hidden = true; $('#voz-resposta').hidden = true; $('#voz-acoes').innerHTML = '';
+  $('#voz-dicas').hidden = false;
+  document.body.classList.add('com-voz');
+}
+function fecharVoz() {
+  pararEscuta(false);
+  try { speechSynthesis.cancel(); } catch { /* sem voz */ }
+  $('#voz').hidden = true;
+  document.body.classList.remove('com-voz');
+  vozUI('parado', 'Toque e fale');
+}
+
+async function ouvirComando() {
+  if (Voz.estado === 'ouvindo') { pararEscuta(true); return; }
+  if (Voz.estado === 'pensando') return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { aviso('Este aparelho não grava áudio pelo app.'); return; }
+  if (Rec.ativo) { aviso('Há uma gravação em andamento. Pare a gravação para usar o comando de voz.'); return; }
+  if (typeof Dimy !== 'undefined' && Dimy.ligado) desligarDimy('Mãos-livres pausado para o comando de voz.');
+  abrirVoz();
+  try { speechSynthesis.cancel(); } catch { /* sem voz */ }
+  // iPhone: a voz só toca depois de liberada por um toque; libera agora, no toque do microfone.
+  if (!Voz.liberou) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch { /* sem voz */ } Voz.liberou = true; }
+  atualizarLocalSilencioso();
+  try { Voz.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { vozUI('erro', 'Libere o microfone para o app nos Ajustes do iPhone.'); return; }
+  const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+  Voz.pedacos = []; Voz.falou = false; Voz.inicio = performance.now(); Voz.ultimaFala = 0; Voz.base = 0.006;
+  Voz.mr = new MediaRecorder(Voz.stream, tipo ? { mimeType: tipo } : undefined);
+  Voz.mr.ondataavailable = (e) => e.data.size && Voz.pedacos.push(e.data);
+  Voz.mr.onstop = enviarComando;
+  Voz.mr.start(250);
+  // Medidor de nível: anima o botão e detecta o fim da fala.
+  try {
+    Voz.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await Voz.ctx.resume?.();
+    Voz.an = Voz.ctx.createAnalyser(); Voz.an.fftSize = 1024;
+    Voz.ctx.createMediaStreamSource(Voz.stream).connect(Voz.an);
+  } catch { Voz.an = null; }
+  vozUI('ouvindo', Voz.segurando ? 'Pode falar… solte para enviar' : 'Ouvindo… pode falar');
+  if (navigator.vibrate) navigator.vibrate(25);
+  medirVoz();
+}
+
+function medirVoz() {
+  cancelAnimationFrame(Voz.raf);
+  const buf = Voz.an ? new Float32Array(Voz.an.fftSize) : null;
+  const passo = () => {
+    if (Voz.estado !== 'ouvindo') return;
+    const agora = performance.now(), dt = agora - Voz.inicio;
+    let rms = 0;
+    if (buf) { Voz.an.getFloatTimeDomainData(buf); for (const v of buf) rms += v * v; rms = Math.sqrt(rms / buf.length); }
+    if (dt < 400) Voz.base = Math.max(Voz.base, rms * 0.9);
+    const limiar = Math.max(0.015, Voz.base * 2.5);
+    if (rms > limiar) { Voz.falou = true; Voz.ultimaFala = agora; }
+    $('#voz').style.setProperty('--nivel', Math.min(1, rms / 0.12).toFixed(3));
+    if (!Voz.segurando && buf) {
+      if (Voz.falou && agora - Voz.ultimaFala > VOZ_SILENCIO_MS) { pararEscuta(true); return; }
+      if (!Voz.falou && dt > VOZ_ESPERA_MS) { pararEscuta(false); vozUI('parado', 'Não ouvi nada. Toque e fale de novo.'); return; }
+    }
+    if (dt > VOZ_LIMITE_MS) { pararEscuta(true); return; }
+    Voz.raf = requestAnimationFrame(passo);
+  };
+  Voz.raf = requestAnimationFrame(passo);
+}
+
+function pararEscuta(enviar) {
+  cancelAnimationFrame(Voz.raf);
+  Voz.enviar = enviar;
+  if (Voz.mr && Voz.mr.state !== 'inactive') Voz.mr.stop();
+  else Voz.stream?.getTracks().forEach((t) => t.stop());
+  try { Voz.ctx?.close(); } catch { /* já fechado */ }
+  Voz.ctx = null; Voz.an = null;
+  $('#voz').style.setProperty('--nivel', 0);
+  if (enviar) vozUI('pensando', 'Entendendo…');
+}
+
+async function enviarComando() {
+  Voz.stream?.getTracks().forEach((t) => t.stop());
+  const mime = (Voz.mr?.mimeType || 'audio/mp4').split(';')[0];
+  const audio = new Blob(Voz.pedacos, { type: mime });
+  Voz.mr = null;
+  if (!Voz.enviar) return;
+  if (audio.size < 1500) { vozUI('parado', 'Muito curto. Toque e fale de novo.'); return; }
+  vozUI('pensando', 'Entendendo…');
+  try {
+    const r = await api('/audio?voz=1', { metodo: 'POST', corpo: audio, tipo: mime });
+    if (r.ignorado || !r.resposta) { vozUI('parado', 'Não entendi. Toque e fale de novo.'); return; }
+    await mostrarRespostaVoz(r.texto, r.resposta, r.acoes || []);
+  } catch (e) { vozUI('erro', e.message || 'Falhou. Tente de novo.'); }
+}
+
+async function comandoTexto(texto) {
+  if (Voz.estado === 'ouvindo') pararEscuta(false);
+  abrirVoz();
+  vozUI('pensando', 'Entendendo…');
+  try {
+    const r = await api('/chat', { metodo: 'POST', corpo: { texto, voz: true, id: `voz-${Date.now()}` } });
+    await mostrarRespostaVoz(texto, r.resposta, r.acoes || []);
+  } catch (e) { vozUI('erro', e.message); }
+}
+
+async function mostrarRespostaVoz(ouvido, resposta, acoes) {
+  $('#voz-dicas').hidden = true;
+  const o = $('#voz-ouvido'); o.hidden = false; o.textContent = `“${ouvido}”`;
+  const rr = $('#voz-resposta'); rr.hidden = false; rr.innerHTML = leve(resposta).replace(/\n/g, '<br>');
+  const destino = executarAcoes(acoes);
+  $('#voz-acoes').innerHTML = destino ? `<button class="btn primario largo" data-voz-ir="${esc(destino.ir)}">${esc(destino.rotulo)}</button>` : '';
+  vozUI('respondendo', 'Toque no microfone para continuar');
+  Voz.agenda = acoes.some((a) => /^agenda_|^lembrete_/.test(a.ferramenta));
+  if (Voz.agenda) { Agenda.inicioSemana = null; if (/^#?hoje/.test(location.hash || '#hoje')) rota(); }
+  const pergunta = /\?\s*$/.test(resposta.trim());
+  if ($('#voz-falar-resp').checked) await falar(resposta);
+  if ($('#voz').hidden) return;
+  if (destino?.auto) { fecharVoz(); ir(destino.ir); if (destino.depois) setTimeout(destino.depois, 400); return; }
+  if (pergunta) { ouvirComando(); return; }             // o Dimy perguntou algo: já escuta a resposta
+  vozUI('respondendo', 'Toque no microfone para continuar');
+}
+
+/** Traduz o que o Dimy executou em navegação no app. Devolve o destino principal. */
+function executarAcoes(acoes) {
+  let destino = null;
+  for (const a of acoes) {
+    const d = a.dados || {};
+    if (a.ferramenta === 'oraculo_pesquisar' && d.id) destino = { ir: `dossie/${d.id}`, rotulo: 'Ver a pesquisa', auto: true };
+    else if (a.ferramenta === 'oraculo_ver' && d.dossie_id) destino = { ir: `dossie/${d.dossie_id}`, rotulo: 'Abrir dossiê', auto: true };
+    else if (a.ferramenta === 'empresas_proximas' && d.empresas) {
+      destino = { ir: 'oraculo', rotulo: 'Ver empresas', auto: true, depois: () => { mostrarPerto(d, d.segmento || ''); $('#form-perto')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
+    } else if (a.ferramenta === 'app_comando') {
+      if (d.acao === 'iniciar_gravacao') {
+        destino = { ir: 'gravar', rotulo: 'Gravar', auto: true, depois: () => {
+          const tipo = d.tipo_gravacao || 'reuniao';
+          document.querySelector(`[data-tipo="${tipo}"]`)?.click();
+          comecarGravacao().catch(() => aviso('Toque no botão vermelho para começar a gravar.'));
+        } };
+      } else if (d.tela) destino = { ir: d.tela === 'avisos' ? 'mais' : d.tela, rotulo: 'Abrir', auto: true };
+    } else if (/^agenda_|^lembrete_/.test(a.ferramenta) && !destino) destino = { ir: 'hoje', rotulo: 'Ver agenda', auto: false };
+    else if (a.ferramenta === 'whatsapp_conversa' && !destino) destino = { ir: 'whats', rotulo: 'Abrir WhatsApp', auto: false };
+  }
+  return destino;
+}
+
+// Antes de um comando, atualiza a localização (se já liberada) para "empresas perto de mim" sair certo.
+async function atualizarLocalSilencioso() {
+  if (!geoLigado() || !navigator.geolocation) return;
+  try { const pos = await pegarPosicao(); await enviarLocal(pos); } catch { /* segue com a última */ }
+}
+
+// Botão do centro: toque = fala com fim automático; segurar = walkie-talkie.
+const bVoz = $('#b-comando-voz');
+bVoz.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  try { bVoz.setPointerCapture(e.pointerId); } catch { /* sem captura */ }
+  Voz.apertou = performance.now();
+  Voz.timerSegurar = setTimeout(() => { if (Voz.estado !== 'ouvindo') { Voz.segurando = true; ouvirComando(); } }, 350);
+});
+const soltarVoz = () => {
+  clearTimeout(Voz.timerSegurar);
+  if (Voz.segurando) { Voz.segurando = false; if (Voz.estado === 'ouvindo') pararEscuta(true); return; }
+  if (performance.now() - Voz.apertou < 350) ouvirComando();
+};
+bVoz.addEventListener('pointerup', soltarVoz);
+bVoz.addEventListener('pointercancel', () => { clearTimeout(Voz.timerSegurar); if (Voz.segurando) { Voz.segurando = false; pararEscuta(true); } });
+bVoz.addEventListener('contextmenu', (e) => e.preventDefault());
+$('#voz-orbe').addEventListener('click', () => ouvirComando());
+$('#voz').addEventListener('click', (e) => {
+  if (e.target.closest('[data-voz-fechar]')) { fecharVoz(); return; }
+  const t = e.target.closest('[data-voz-texto]');
+  if (t) { comandoTexto(t.dataset.vozTexto); return; }
+  const irPara = e.target.closest('[data-voz-ir]');
+  if (irPara) { const d = irPara.dataset.vozIr; fecharVoz(); ir(d); }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && Voz.estado === 'ouvindo') pararEscuta(false); });
