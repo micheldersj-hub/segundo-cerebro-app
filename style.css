@@ -469,3 +469,14 @@ details ul { margin-top: 8px; }
 .cartao-oraculo .acoes { margin-top: 0; }
 .voz-o { flex: 0 0 auto !important; padding: 12px 16px; }
 .voz-o svg { width: 20px; height: 20px; }
+
+/* Dossiê numa tela só + encaminhar */
+.secao-d { scroll-margin-top: 130px; margin-top: 22px; }
+.titulo-sec { font-size: 18px; font-weight: 800; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
+.titulo-sec::before { content: ''; width: 4px; height: 18px; border-radius: 2px; background: var(--roxo); }
+.btn.encaminhar { margin-top: 12px; background: #16A34A; color: #fff; }
+.btn.encaminhar svg, .envio-ok svg, .envio-pend svg { width: 20px; height: 20px; }
+.envio-ok { margin: 12px 0 0; display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--verde-claro); color: #047857; font-size: 14.5px; }
+.envio-pend { margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--verde-claro); color: #047857; text-decoration: none; font-size: 15px; }
+.envio-pend span { flex: 1; display: grid; }
+.envio-pend small { color: var(--tinta-suave); font-size: 12.5px; }

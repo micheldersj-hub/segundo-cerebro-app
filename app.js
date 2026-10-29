@@ -235,8 +235,10 @@ const IC_CAL = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16
 const IC_REL = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 let folhaAcao = null;
 
-function abrirFolha({ titulo, campos, salvar, apagar }) {
+let folhaBotao = 'Salvar';
+function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar' }) {
   $('#folha-titulo').textContent = titulo;
+  folhaBotao = botao; $('#folha-salvar').textContent = botao;
   $('#folha-campos').innerHTML = campos.map((c) => {
     if (c.tipo === 'data-hora') {
       return `<div class="linha-campos">
@@ -259,10 +261,10 @@ $('#folha').addEventListener('click', (e) => { if (e.target.closest('[data-fecha
 $('#folha-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const dados = Object.fromEntries(new FormData(e.currentTarget));
-  const b = $('#folha-salvar'); b.disabled = true; b.textContent = 'Salvando…';
+  const b = $('#folha-salvar'); b.disabled = true; b.textContent = folhaBotao === 'Salvar' ? 'Salvando…' : 'Enviando…';
   try { await folhaAcao(dados); fecharFolha(); }
   catch (err) { $('#folha-erro').textContent = err.message; }
-  finally { b.disabled = false; b.textContent = 'Salvar'; }
+  finally { b.disabled = false; b.textContent = folhaBotao; }
 });
 
 function proximaHoraCheia() { const d = new Date(Date.now() + 3600e3); d.setMinutes(0); return horaISO(d); }
@@ -1367,11 +1369,24 @@ async function carregarDossie(id) {
     </article>
     <p class="resumo-texto">${esc(x.resumo || '')}</p>
     ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div class="ficha-item ${k === 'Atividade' ? 'largo' : ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '<p class="dica">CNPJ não identificado: dossiê feito só com o que é público na web.</p>'}
-    <div class="segs" role="tablist">
-      ${[['abordagem', 'Abordagem'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg ${Oraculo.pane === k ? 'ativo' : ''}" data-dpane="${k}">${t}</button>`).join('')}
-    </div>
-    <div id="dpane">${paneDossie(d, Oraculo.pane)}</div>
+    ${blocoEnvio(d)}
+    <nav class="segs" aria-label="Ir para">
+      ${[['abordagem', 'Abordagem'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg" data-dpane="${k}">${t}</button>`).join('')}
+    </nav>
+    ${['abordagem', 'empresa', 'riscos', 'fontes'].map((k) => `<section class="secao-d" id="sec-${k}"><h2 class="titulo-sec">${{ abordagem: 'Abordagem', empresa: 'Empresa e mercado', riscos: 'Riscos e sinais financeiros', fontes: 'Fontes' }[k]}</h2>${paneDossie(d, k)}</section>`).join('')}
     ${rodapeDossie()}`;
+}
+
+const IC_WHATS = '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>';
+const waLink = (numero, texto) => `https://wa.me/${numero || ''}?text=${encodeURIComponent(texto || '')}`;
+
+// Encaminhar: aviso de envio pedido ao Dimy + botão para mandar o dossiê completo pelo WhatsApp.
+function blocoEnvio(d) {
+  const e = d.envio;
+  const status = e?.status === 'enviado'
+    ? `<p class="envio-ok">${IC_WHATS}Enviado pelo WhatsApp para <b>${esc(e.nome)}</b></p>`
+    : d.enviar_para ? `<a class="envio-pend" href="${esc(waLink(e?.numero, d.texto_whatsapp))}" target="_blank" rel="noopener">${IC_WHATS}<span>Enviar para <b>${esc(e?.nome || d.enviar_para)}</b> no WhatsApp<small>${esc(e?.motivo ? 'Toque para mandar pelo seu WhatsApp' : 'Pronto para enviar')}</small></span>›</a>` : '';
+  return `${status}<button class="btn largo encaminhar" data-dossie="encaminhar">${IC_WHATS}Encaminhar dossiê no WhatsApp</button>`;
 }
 
 function rodapeDossie() {
@@ -1447,10 +1462,8 @@ function paneDossie(d, p) {
 $('#v-dossie').addEventListener('click', async (e) => {
   const seg = e.target.closest('[data-dpane], [data-dpane-ir]');
   if (seg) {
-    Oraculo.pane = seg.dataset.dpane || seg.dataset.dpaneIr;
-    document.querySelectorAll('.dseg').forEach((b) => b.classList.toggle('ativo', b.dataset.dpane === Oraculo.pane));
-    $('#dpane').innerHTML = paneDossie(Oraculo.atual, Oraculo.pane);
-    if (seg.dataset.dpaneIr) $('.segs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const alvo = document.getElementById(`sec-${seg.dataset.dpane || seg.dataset.dpaneIr}`);
+    if (alvo) window.scrollTo({ top: alvo.getBoundingClientRect().top + window.scrollY - 120, behavior: 'smooth' });
     return;
   }
   const b = e.target.closest('[data-dossie]');
@@ -1471,6 +1484,19 @@ $('#v-dossie').addEventListener('click', async (e) => {
         editarLembrete(null, { texto: `Falar com ${nome}`, dia: somaDias(diaISO(new Date()), 1), hora: '10:00' }); break;
       case 'refazer':
         await api(`/dossies/${d.id}/refazer`, { metodo: 'POST' }); aviso('Pesquisando de novo.'); carregarDossie(d.id); break;
+      case 'encaminhar':
+        abrirFolha({
+          titulo: 'Encaminhar no WhatsApp', botao: 'Enviar',
+          campos: [{ rotulo: 'Para quem (nome ou número) — deixe vazio para escolher no WhatsApp', nome: 'para', valor: d.enviar_para || '', placeholder: 'Ex.: Bruno ou 31 99999-0000' }],
+          salvar: async (f) => {
+            const para = (f.para || '').trim();
+            if (!para) { location.href = waLink('', d.texto_whatsapp); return; }
+            const r = await api(`/dossies/${d.id}/enviar`, { metodo: 'POST', corpo: { para } });
+            if (r.status === 'enviado') { aviso(`Enviado para ${r.nome}.`); carregarDossie(d.id); return; }
+            location.href = r.link || waLink('', d.texto_whatsapp);
+          },
+        });
+        break;
       case 'apagar':
         if (!confirm(`Apagar o dossiê de ${nome}?`)) return;
         await api(`/dossies/${d.id}/apagar`, { metodo: 'POST' }); aviso('Dossiê apagado.'); ir('oraculo'); break;
