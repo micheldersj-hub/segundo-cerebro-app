@@ -407,11 +407,13 @@ $('#mic').addEventListener('click', async () => {
 // WhatsApp
 // ---------------------------------------------------------------------------
 async function carregarContatos() {
-  const { contatos } = await api('/contatos');
+  const { contatos: todos } = await api('/contatos');
+  // Contatos de teste neutralizados não interessam a ninguém.
+  const contatos = todos.filter((c) => c.name !== '[teste removido]' && new Date(c.last_seen).getFullYear() > 2001);
   contatos.sort((a, b) => (b.awaiting_reply - a.awaiting_reply) || (new Date(b.last_seen) - new Date(a.last_seen)));
-  $('#lista-contatos').innerHTML = contatos.length
-    ? contatos.map((c) => `<li><button class="item ${c.awaiting_reply ? 'espera' : ''}" data-ir="contato/${esc(c.wa_id)}"><span class="t">${esc(nomeDe(c))}${c.muted ? ' (silenciado)' : ''}</span><span class="h">${quando(c.last_seen)}</span><span class="d">${esc(c.last_summary || '')}</span></button></li>`).join('')
-    : '<li><p class="vazio">Assim que o seu WhatsApp Business for conectado, as conversas aparecem aqui.</p></li>';
+  $('#lista-contatos').hidden = !contatos.length;
+  $('#whats-desconectado').hidden = !!contatos.length;
+  $('#lista-contatos').innerHTML = contatos.map((c) => `<li><button class="pessoa" data-ir="contato/${esc(c.wa_id)}"><span class="avatar-p">${esc(iniciais(nomeDe(c)))}</span><span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}${c.muted ? ' · silenciado' : ''}</span><span class="d">${esc(c.last_summary || '')}</span></span><span class="h">${c.awaiting_reply ? '<i class="etiqueta">espera</i>' : quando(c.last_seen)}</span></button></li>`).join('');
 }
 
 let contatoAtual = null;

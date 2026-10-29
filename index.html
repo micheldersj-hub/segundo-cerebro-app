@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <!-- Primeiro acesso -->
@@ -193,6 +193,16 @@
     <section id="v-whats" class="vista" data-titulo="WhatsApp" hidden>
       <header class="topo"><h1>WhatsApp</h1><p class="sub">Quem espera você aparece primeiro.</p></header>
       <ul id="lista-contatos" class="lista"></ul>
+      <article id="whats-desconectado" class="cartao-info" hidden>
+        <span class="ic verde"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg></span>
+        <h2>Seu WhatsApp ainda não está ligado</h2>
+        <p>O app está conectado só ao número de teste da Meta. Para as suas conversas aparecerem aqui, o seu WhatsApp Business precisa ser ligado pela <b>Coexistência</b> da Meta, e você continua usando o app normalmente no celular.</p>
+        <ol class="passos">
+          <li>Empresa verificada no Gerenciador de Negócios da Meta</li>
+          <li>Ligar o seu número ao app "Segundo Cerebro" (lendo um QR code no WhatsApp Business)</li>
+          <li>Pronto: conversas, quem espera resposta e sugestões chegam aqui</li>
+        </ol>
+      </article>
     </section>
 
     <!-- Um contato -->
@@ -257,6 +267,6 @@
     </form>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=7" type="module"></script>
+  <script src="app.js?v=8" type="module"></script>
 </body>
 </html>

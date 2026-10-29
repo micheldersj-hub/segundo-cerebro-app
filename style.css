@@ -350,3 +350,12 @@ details ul { margin-top: 8px; }
 .rodape-gravacao select { flex: 1; background: var(--superficie); }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* WhatsApp ainda não ligado */
+.cartao-info { margin-top: 14px; background: var(--superficie); border-radius: var(--raio); box-shadow: var(--sombra); padding: 18px; display: grid; gap: 10px; }
+.cartao-info h2 { margin: 4px 0 0; font-size: 18px; font-weight: 800; }
+.cartao-info p { margin: 0; color: var(--tinta-suave); font-size: 15px; }
+.cartao-info b { color: var(--tinta); }
+.passos { margin: 4px 0; padding: 0; list-style: none; counter-reset: p; display: grid; gap: 10px; }
+.passos li { counter-increment: p; display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; font-size: 14.5px; font-weight: 600; }
+.passos li::before { content: counter(p); width: 28px; height: 28px; border-radius: 50%; background: var(--mar-claro); color: var(--mar-forte); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
