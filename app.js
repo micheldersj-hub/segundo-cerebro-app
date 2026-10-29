@@ -1,7 +1,15 @@
 // Segundo Cérebro — app do iPhone (PWA). Fala só com a função "app" do Supabase.
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 const API = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/app';
 const GRAVADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/gravador';
 const ORACULO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/oraculo';
+const EQUIPE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/equipe';
+// Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
+const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'cerebro-sessao' } });
+let sessao = null;
+let eu = null; // { usuario: {id, nome, email, papel}, dono: bool }
 const CHAVE = 'cerebro-chave';
 const $ = (s) => document.querySelector(s);
 
@@ -15,14 +23,19 @@ let chave = guardado.ler(CHAVE);
 // API
 // ---------------------------------------------------------------------------
 async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
-  const headers = { 'x-app-key': chave || '' };
+  const headers = {};
+  try { sessao = (await SUPA.auth.getSession()).data.session; } catch { sessao = null; }
+  if (sessao) headers.authorization = `Bearer ${sessao.access_token}`;
+  else if (chave) headers['x-app-key'] = chave;
   let body;
   if (corpo instanceof Blob) { body = corpo; headers['content-type'] = tipo || corpo.type || 'application/octet-stream'; }
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
-  const base = /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const ehEquipe = /^\/equipe/.test(caminho);
+  if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
-  if (res.status === 401) { sair(); throw new Error('Chave inválida.'); }
+  if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
   if (!res.ok) throw new Error(dados.erro || `Erro ${res.status}`);
   return dados;
 }
@@ -57,7 +70,8 @@ function ir(destino) { location.hash = destino; }
 
 async function rota() {
   const [nome, arg] = (location.hash.slice(1) || 'hoje').split('/');
-  const vista = nome === 'avisos' ? 'mais' : VISTAS[nome] ? nome : 'hoje';
+  let vista = nome === 'avisos' ? 'mais' : VISTAS[nome] ? nome : 'hoje';
+  if ((vista === 'whats' || vista === 'contato') && eu && !eu.dono) vista = 'hoje';   // WhatsApp é só do dono
   for (const [k, sel] of Object.entries(VISTAS)) $(sel).hidden = k !== vista;
   document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.ir === (ABA_DE[vista] || vista)));
   $('#pilula-gravando').hidden = !Rec.ativo || vista === 'gravando';
@@ -88,7 +102,8 @@ document.addEventListener('click', (e) => {
 // ---------------------------------------------------------------------------
 function saudacao() {
   const h = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' }));
-  return h < 12 ? 'Bom dia, Michelder' : h < 18 ? 'Boa tarde, Michelder' : 'Boa noite, Michelder';
+  const nome = (eu?.usuario?.nome || 'Michelder').split(' ')[0];
+  return `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}, ${nome}`;
 }
 
 // A âncora: uma coisa só, a mais importante agora.
@@ -495,10 +510,12 @@ async function carregarMais() {
     [st.claude, 'Inteligência (Claude)'],
     [st.openai, 'Memória e áudio (OpenAI)'],
     [st.google, 'Google Agenda e Gmail'],
-    [!!st.whatsapp_ultima, st.whatsapp_ultima ? `WhatsApp Business (última mensagem ${quando(st.whatsapp_ultima)})` : 'WhatsApp Business (aguardando conexão)'],
+    ...(st.dono === false ? [] : [[!!st.whatsapp_ultima, st.whatsapp_ultima ? `WhatsApp Business (última mensagem ${quando(st.whatsapp_ultima)})` : 'WhatsApp Business (aguardando conexão)']]),
   ];
   $('#status').innerHTML = itens.map(([ok, t]) => `<li class="${ok ? 'ok' : ''}">${esc(t)}</li>`).join('');
   if (st.antecedencia_alarme) $('#alarme-min').textContent = st.antecedencia_alarme;
+  aplicarPapel();
+  carregarEquipe().catch(() => {});
   const g = $('#b-google');
   g.hidden = st.google || !st.google_conectar; if (st.google_conectar) g.href = st.google_conectar;
 
@@ -515,7 +532,7 @@ async function copiar(texto, ok) {
   catch { prompt('Copie:', texto); }
 }
 $('#b-copiar-url').addEventListener('click', () => copiar(`${API}/alarmes?horas=6`, 'Endereço copiado.'));
-$('#b-copiar-chave').addEventListener('click', () => copiar(chave || '', 'Chave copiada.'));
+$('#b-copiar-chave').addEventListener('click', () => (chave ? copiar(chave, 'Chave copiada.') : aviso('A chave do atalho fica no aparelho onde ela foi usada. Peça ao Claude se precisar dela de novo.')));
 
 $('#b-push').addEventListener('click', async () => {
   try {
@@ -533,10 +550,14 @@ $('#b-push').addEventListener('click', async () => {
 });
 
 function sair() {
+  SUPA.auth.signOut().catch(() => {});
+  sessao = null; eu = null;
   guardado.gravar(CHAVE, null); chave = null;
-  $('#app').hidden = true; $('#entrar').hidden = false;
+  pararGeo?.();
+  $('#app').hidden = true;
+  mostrarEntrar('login');
 }
-$('#b-sair').addEventListener('click', () => { if (confirm('Sair deste aparelho? Você vai precisar da chave de novo.')) sair(); });
+$('#b-sair').addEventListener('click', () => { if (confirm('Sair deste aparelho? Para voltar, entre com seu e-mail e senha.')) sair(); });
 
 // ---------------------------------------------------------------------------
 // Gravador (reuniões, ligações, notas de voz) — no espírito do Plaud, com o iPhone como gravador
@@ -589,7 +610,7 @@ async function enfileirar(item) {
 }
 
 async function enviarFila() {
-  if (enviando || !chave) return;
+  if (enviando || !logado()) return;
   enviando = true;
   try {
     const itens = new Map([...(await fila.todos()).map((i) => [i.chave, i]), ...memoria]);
@@ -1224,20 +1245,172 @@ document.addEventListener('visibilitychange', () => {
 // ---------------------------------------------------------------------------
 // Entrada
 // ---------------------------------------------------------------------------
-$('#form-chave').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  chave = $('#chave').value.trim();
-  try {
-    await api('/status');
-    guardado.gravar(CHAVE, chave);
-    iniciar();
-  } catch { $('#erro-chave').textContent = 'Essa chave não abriu o app. Confira se copiou inteira, sem espaços.'; chave = null; }
-});
-
+let iniciou = false;
 function iniciar() {
   $('#entrar').hidden = true; $('#app').hidden = false;
-  window.addEventListener('hashchange', rota);
+  aplicarPapel();
+  if (!iniciou) { window.addEventListener('hashchange', rota); iniciou = true; }
   rota();
+  iniciarGeo();
+}
+
+// ---------------------------------------------------------------------------
+// Login da equipe
+// ---------------------------------------------------------------------------
+const logado = () => !!(sessao || chave);
+
+function mostrarEntrar(etapa, erro = '') {
+  $('#app').hidden = true; $('#entrar').hidden = false;
+  document.querySelectorAll('#entrar .entrar-form').forEach((f) => { f.hidden = f.dataset.etapa !== etapa; f.querySelector('[data-erro]').textContent = ''; });
+  $('#entrar-carregando').hidden = etapa !== 'carregando';
+  const f = document.querySelector(`#entrar [data-etapa="${etapa}"]`);
+  if (f && erro) f.querySelector('[data-erro]').textContent = erro;
+}
+
+async function carregarEu() {
+  try { eu = await api('/equipe/eu'); } catch { eu = null; }
+}
+
+/** Mostra ou esconde o que é só do dono (WhatsApp, atalho da Siri) e a gestão da equipe. */
+function aplicarPapel() {
+  const dono = !eu || eu.dono;          // sem login (chave antiga) = dono
+  document.querySelectorAll('.so-dono').forEach((el) => { el.hidden = !dono; });
+  $('#equipe-sec').hidden = !(eu?.usuario?.papel === 'admin');
+  $('#conta-quem').textContent = eu?.usuario ? `Você entrou como ${eu.usuario.nome} (${eu.usuario.email}).` : 'Você está usando a chave de acesso antiga.';
+  $('#b-criar-login').hidden = !!sessao || !chave;
+  if (eu?.usuario?.nome) $('#avatar-eu').textContent = iniciais(eu.usuario.nome).slice(0, 1);
+}
+
+document.querySelectorAll('[data-ver]').forEach((b) => b.addEventListener('click', () => {
+  const i = document.getElementById(b.dataset.ver); i.type = i.type === 'password' ? 'text' : 'password';
+}));
+
+$('#form-login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.currentTarget, erro = f.querySelector('[data-erro]'), bt = $('#login-btn');
+  const email = $('#login-email').value.trim().toLowerCase(), password = $('#login-senha').value;
+  if (!email || !password) { erro.textContent = 'Preencha e-mail e senha.'; return; }
+  bt.disabled = true; bt.textContent = 'Entrando…'; erro.textContent = '';
+  try {
+    const { data, error } = await SUPA.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(/invalid/i.test(error.message) ? 'E-mail ou senha incorretos.' : error.message);
+    sessao = data.session;
+    await carregarEu();
+    if (!eu) { await SUPA.auth.signOut(); sessao = null; throw new Error('Seu acesso não está liberado. Fale com o administrador.'); }
+    $('#login-senha').value = '';
+    iniciar();
+  } catch (err) { erro.textContent = err.message; }
+  finally { bt.disabled = false; bt.textContent = 'Entrar'; }
+});
+
+$('#form-senha').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = e.currentTarget.querySelector('[data-erro]');
+  const a = $('#nova-senha').value, b = $('#nova-senha2').value;
+  if (a.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
+  if (a !== b) { erro.textContent = 'As duas senhas não estão iguais.'; return; }
+  const { error } = await SUPA.auth.updateUser({ password: a });
+  if (error) { erro.textContent = /same|different/i.test(error.message) ? 'Use uma senha diferente da anterior.' : error.message; return; }
+  sessao = (await SUPA.auth.getSession()).data.session;
+  $('#nova-senha').value = ''; $('#nova-senha2').value = '';
+  await carregarEu();
+  aviso('Senha criada. Bem-vindo!');
+  iniciar();
+});
+
+/** Abre a sessão a partir de um link de acesso (convite ou redefinição) e pede a senha. */
+async function usarCodigoDeAcesso(tokenHash) {
+  mostrarEntrar('carregando');
+  const { data, error } = await SUPA.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' });
+  if (error || !data.session) { mostrarEntrar('login', 'Este link expirou ou já foi usado. Peça um novo ao administrador.'); return false; }
+  sessao = data.session;
+  await carregarEu();
+  $('#senha-ola').textContent = eu?.usuario ? `Olá, ${eu.usuario.nome.split(' ')[0]}! Crie sua senha para entrar.` : 'Crie sua senha para entrar.';
+  if (eu?.usuario?.email) $('#login-email').value = eu.usuario.email;
+  mostrarEntrar('senha');
+  return true;
+}
+
+$('#form-ativar').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = e.currentTarget.querySelector('[data-erro]');
+  const email = $('#ativar-email').value.trim().toLowerCase(), nome = $('#ativar-nome').value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { erro.textContent = 'Informe um e-mail válido.'; return; }
+  try {
+    const r = await api('/equipe/ativar', { metodo: 'POST', corpo: { email, nome } });
+    await usarCodigoDeAcesso(r.token_hash);
+  } catch (err) { erro.textContent = err.message; }
+});
+$('#ativar-depois').addEventListener('click', () => { guardado.gravar('cerebro-ativar-depois', String(Date.now())); iniciar(); });
+$('#b-criar-login').addEventListener('click', () => mostrarEntrar('ativar'));
+
+// ---- Equipe (administrador) ----
+async function carregarEquipe() {
+  if (eu?.usuario?.papel !== 'admin') return;
+  const { membros } = await api('/equipe');
+  $('#lista-equipe').innerHTML = membros.map((m) => {
+    const eu_ = m.user_id === eu.usuario.id;
+    return `<li class="${m.ativo ? '' : 'inativo'}"><span class="avatar-p ${m.papel === 'admin' ? 'roxo' : ''}">${esc(iniciais(m.nome))}</span>
+      <div class="eq-corpo"><b>${esc(m.nome)}${eu_ ? ' (você)' : ''}</b><span>${esc(m.email)}</span>
+        <small>${m.papel === 'admin' ? 'Administrador' : 'Membro'}${m.ativo ? '' : ' · bloqueado'}${m.ultimo_acesso ? ` · entrou ${quando(m.ultimo_acesso)}` : ' · ainda não entrou'}</small></div>
+      ${eu_ ? '' : `<div class="eq-acoes"><button class="btn mini claro" data-eq-link="${m.user_id}">Novo link</button>
+        <button class="btn mini ${m.ativo ? 'perigo-txt' : 'claro'}" data-eq-ativo="${m.user_id}" data-ativo="${m.ativo ? '0' : '1'}">${m.ativo ? 'Bloquear' : 'Liberar'}</button></div>`}</li>`;
+  }).join('');
+}
+
+function mostrarLinkConvite(r) {
+  const texto = `Oi, ${r.nome.split(' ')[0]}! Liberei seu acesso ao Segundo Cérebro. Abra este link no iPhone (Safari), crie sua senha e depois adicione à Tela de Início: ${r.link}\n(O link vale por 1 hora.)`;
+  const box = $('#convite-link');
+  box.hidden = false;
+  box.innerHTML = `<p><b>Link de acesso de ${esc(r.nome)}</b> (vale 1 hora). Envie só para essa pessoa.</p>
+    <div class="acoes"><button class="btn claro" id="convite-copiar">Copiar link</button>
+    <a class="btn primario" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(texto)}">Enviar pelo WhatsApp</a></div>`;
+  $('#convite-copiar').onclick = () => copiar(texto, 'Convite copiado.');
+}
+
+$('#form-convite').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const bt = $('#convite-btn'); bt.disabled = true; bt.textContent = '…';
+  try {
+    const r = await api('/equipe/convidar', { metodo: 'POST', corpo: { nome: $('#convite-nome').value.trim(), email: $('#convite-email').value.trim() } });
+    $('#convite-nome').value = ''; $('#convite-email').value = '';
+    mostrarLinkConvite(r);
+    await carregarEquipe();
+  } catch (err) { aviso(err.message); } finally { bt.disabled = false; bt.textContent = 'Convidar'; }
+});
+$('#lista-equipe').addEventListener('click', async (e) => {
+  const l = e.target.closest('[data-eq-link]'), a = e.target.closest('[data-eq-ativo]');
+  try {
+    if (l) mostrarLinkConvite(await api(`/equipe/${l.dataset.eqLink}/link`, { metodo: 'POST' }));
+    if (a) {
+      const liberar = a.dataset.ativo === '1';
+      if (!liberar && !confirm('Bloquear o acesso dessa pessoa? Os dados dela ficam guardados.')) return;
+      await api(`/equipe/${a.dataset.eqAtivo}/ativo`, { metodo: 'POST', corpo: { ativo: liberar } });
+      await carregarEquipe();
+    }
+  } catch (err) { aviso(err.message); }
+});
+
+async function comecar() {
+  const codigo = location.hash.match(/^#acesso=([^&]+)/);
+  if (codigo) {
+    history.replaceState(null, '', location.pathname);
+    if (await usarCodigoDeAcesso(decodeURIComponent(codigo[1]))) return;
+    return;
+  }
+  try { sessao = (await SUPA.auth.getSession()).data.session; } catch { sessao = null; }
+  if (sessao) {
+    await carregarEu();
+    if (eu) { iniciar(); return; }
+    await SUPA.auth.signOut().catch(() => {}); sessao = null;
+  }
+  if (chave) {
+    // Aparelho antigo do dono: continua funcionando e oferece criar o login (uma vez por semana, se ele adiar).
+    const adiou = Number(guardado.ler('cerebro-ativar-depois') || 0);
+    if (Date.now() - adiou > 7 * 864e5) { mostrarEntrar('ativar'); return; }
+    iniciar(); return;
+  }
+  mostrarEntrar('login');
 }
 
 // ---------------------------------------------------------------------------
@@ -1372,7 +1545,7 @@ async function enderecoNoCelular({ lat, lng }) {
   } catch { return null; }
 }
 function iniciarGeo() {
-  if (!navigator.geolocation || !geoLigado() || !chave || Geo.watch != null) return;
+  if (!navigator.geolocation || !geoLigado() || !logado() || Geo.watch != null) return;
   Geo.watch = navigator.geolocation.watchPosition((pos) => enviarLocal(pos).catch(() => {}), () => {}, { enableHighAccuracy: false, maximumAge: 120000 });
 }
 function pararGeo() { if (Geo.watch != null) { navigator.geolocation.clearWatch(Geo.watch); Geo.watch = null; } }
@@ -1646,9 +1819,9 @@ $('#v-dossie').addEventListener('click', async (e) => {
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 // Ao voltar para o app, atualiza a tela atual.
-document.addEventListener('visibilitychange', () => { if (!document.hidden && chave) rota(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && logado() && !$('#app').hidden) rota(); });
 
-if (chave) iniciar(); else $('#entrar').hidden = false;
+comecar();
 
 
 // ---------------------------------------------------------------------------
