@@ -480,3 +480,17 @@ details ul { margin-top: 8px; }
 .envio-pend { margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--verde-claro); color: #047857; text-decoration: none; font-size: 15px; }
 .envio-pend span { flex: 1; display: grid; }
 .envio-pend small { color: var(--tinta-suave); font-size: 12.5px; }
+
+/* Compromisso com endereço: mapa + rota */
+.ev-wrap { --c: var(--mar); --cc: var(--mar-claro); position: relative; border-radius: 16px; background: var(--superficie); box-shadow: var(--sombra); overflow: hidden; min-width: 0; }
+.ev-wrap::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--c); z-index: 1; }
+.ev-wrap .ev-cartao { width: 100%; box-shadow: none; background: transparent; border-radius: 0; }
+.ev-wrap .ev-cartao::before { display: none; }
+.ev-rota { padding: 0 12px 12px 17px; display: grid; gap: 8px; }
+.ev-mapa { display: block; height: 128px; border-radius: 12px; overflow: hidden; position: relative; background: var(--superficie-2); }
+.ev-mapa iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+.ev-rota-acoes { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.ev-rota-acoes a { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px; border-radius: 12px; font-weight: 700; font-size: 14px; text-decoration: none; }
+.ev-rota-acoes svg { width: 18px; height: 18px; }
+.btn-waze { background: #33CCFF; color: #06243A; }
+.btn-mapas { background: var(--superficie-2); color: var(--tinta); }

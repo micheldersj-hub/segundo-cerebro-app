@@ -1,6 +1,6 @@
 // Service worker do Segundo Cérebro: guarda a "casca" do app e recebe notificações push.
-const CACHE = 'cerebro-v13';
-const V = '?v=13';
+const CACHE = 'cerebro-v14';
+const V = '?v=14';
 const SHELL = ['./', './index.html', './app.js' + V, './style.css' + V, './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -50,6 +50,8 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const target = new URL(e.notification.data?.url || './', self.registration.scope).href;
+  // Links de fora (ex.: rota no Waze) abrem fora do app.
+  if (new URL(target).origin !== self.location.origin) { e.waitUntil(self.clients.openWindow(target)); return; }
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {

@@ -98,7 +98,7 @@ function escolherAncora(d) {
   if (d.perguntas.length) return { texto: d.perguntas[0].question, acao: 'Responder', ir: 'conversa' };
   const agenda = Array.isArray(d.agenda) ? d.agenda : [];
   const proximo = agenda.find((e) => new Date(e.inicio) - Date.now() < 2 * 3600e3 && new Date(e.inicio) > Date.now() - 15 * 60e3);
-  if (proximo) return { texto: `${proximo.titulo} às ${hora(proximo.inicio)}${proximo.local ? `, em ${proximo.local}` : ''}.` };
+  if (proximo) return { texto: `${proximo.titulo} às ${hora(proximo.inicio)}${proximo.local ? `, em ${proximo.local}` : ''}.`, ...(eEndereco(proximo.local) ? { acao: 'Ir com Waze', url: linkWaze(proximo.local) } : {}) };
   if (d.aguardando.length) {
     const c = d.aguardando[0];
     return { texto: `${nomeDe(c)} espera sua resposta${c.last_summary ? `: ${c.last_summary}` : '.'}`, acao: 'Responder', ir: `contato/${c.wa_id}` };
@@ -117,6 +117,20 @@ const somaDias = (dia, n) => diaISO(new Date(Date.parse(`${dia}T12:00:00-03:00`)
 const diaSemana = (dia) => new Date(`${dia}T12:00:00-03:00`).getUTCDay(); // 0 = domingo
 const nomeDia = (dia, opts) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ, ...opts });
 
+// ---- Endereços: mapa e rota (Waze / Mapas) ----
+const eEndereco = (l) => !!l && l.trim().length >= 6 && !/^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(l);
+const linkWaze = (l) => `https://waze.com/ul?q=${encodeURIComponent(l)}&navigate=yes`;
+const linkMapas = (l) => `https://maps.apple.com/?daddr=${encodeURIComponent(l)}&dirflg=d`;
+const mapaEmbed = (l) => `https://maps.google.com/maps?q=${encodeURIComponent(l)}&z=15&output=embed`;
+const IC_WAZE = '<svg viewBox="0 0 24 24"><path d="M5 17a8 8 0 1 1 14.5-4.6c0 2.4-1.7 4.6-4.2 4.6H9.5A2.5 2.5 0 0 1 5 17Z"/><circle cx="9" cy="10" r=".8"/><circle cx="14" cy="10" r=".8"/><path d="M9.5 13c1.3 1 3.7 1 5 0"/><circle cx="8" cy="19.5" r="1.5"/><circle cx="16" cy="19.5" r="1.5"/></svg>';
+const IC_ROTA = '<svg viewBox="0 0 24 24"><path d="M3 11 21 3l-8 18-2-8-8-2Z"/></svg>';
+function blocoRota(l) {
+  return `<div class="ev-rota">
+    <a class="ev-mapa" href="${esc(linkWaze(l))}" target="_blank" rel="noopener" aria-label="Abrir trajeto no Waze"><iframe src="${esc(mapaEmbed(l))}" loading="lazy" tabindex="-1" title="Mapa"></iframe></a>
+    <div class="ev-rota-acoes"><a class="btn-waze" href="${esc(linkWaze(l))}" target="_blank" rel="noopener">${IC_WAZE}Ir com Waze</a><a class="btn-mapas" href="${esc(linkMapas(l))}" target="_blank" rel="noopener">${IC_ROTA}Mapas</a></div>
+  </div>`;
+}
+
 const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true };
 function inicioDaSemana(dia) { return somaDias(dia, -((diaSemana(dia) + 6) % 7)); } // segunda-feira
 
@@ -132,7 +146,7 @@ async function carregarHoje() {
   $('#ancora-texto').textContent = a.texto;
   const bt = $('#ancora-acao');
   bt.hidden = !a.acao; bt.textContent = a.acao || '';
-  bt.onclick = () => a.ir && ir(a.ir);
+  bt.onclick = () => { if (a.url) location.href = a.url; else if (a.ir) ir(a.ir); };
 
   // Lembretes: cartões com sino e horário (toque para mudar data e hora)
   const lem = d.lembretes || [];
@@ -201,13 +215,15 @@ function desenharLinhaTempo() {
     if (!marcouAgora && Date.parse(e.inicio) > agora) { marcouAgora = true; linha = `<div class="agora-linha"><span>${horaISO(new Date())}</span></div>`; }
     const passou = e.fim && Date.parse(e.fim) < agora;
     const hora = e.dia_inteiro ? 'Dia todo' : `${horaISO(e.inicio)}${e.fim ? ` – ${horaISO(e.fim)}` : ''}`;
+    const rota = eEndereco(e.local) && !passou;
     return `${linha}<div class="evento ${passou ? 'passou' : ''}">
       <div class="ev-hora">${e.dia_inteiro ? '•' : horaISO(e.inicio)}</div>
-      <button class="ev-cartao ${cores[k % cores.length]}" data-evento="${esc(e.id)}">
+      <div class="ev-wrap ${cores[k % cores.length]}">
+      <button class="ev-cartao" data-evento="${esc(e.id)}">
         <span class="ev-t">${esc(e.titulo)}</span>
         <span class="ev-meta"><span class="pilula-hora"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${hora}</span>${e.local ? `<span class="ev-local"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-12a7 7 0 1 1 14 0c0 5.8-7 12-7 12Z"/><circle cx="12" cy="9" r="2.5"/></svg>${esc(e.local)}</span>` : ''}</span>
         <span class="ev-editar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/></svg></span>
-      </button></div>`;
+      </button>${rota ? blocoRota(e.local) : ''}</div></div>`;
   }).join('') + (!marcouAgora ? `<div class="agora-linha"><span>${horaISO(new Date())}</span></div>` : '');
 }
 
