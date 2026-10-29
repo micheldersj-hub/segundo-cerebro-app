@@ -516,6 +516,7 @@ async function carregarMais() {
   if (st.antecedencia_alarme) $('#alarme-min').textContent = st.antecedencia_alarme;
   aplicarPapel();
   carregarEquipe().catch(() => {});
+  if (st.dono !== false) carregarAgendador().catch(() => {});
   const g = $('#b-google');
   g.hidden = st.google || !st.google_conectar; if (st.google_conectar) g.href = st.google_conectar;
 
@@ -1343,6 +1344,48 @@ $('#form-ativar').addEventListener('submit', async (e) => {
 });
 $('#ativar-depois').addEventListener('click', () => { guardado.gravar('cerebro-ativar-depois', String(Date.now())); iniciar(); });
 $('#b-criar-login').addEventListener('click', () => mostrarEntrar('ativar'));
+
+// ---- Agendamento automático pelo WhatsApp (só o dono) ----
+const AG_DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const AG_STATUS = { aguardando: 'esperando o cliente escolher', marcado: 'marcada', cancelado: 'cancelada', expirado: 'sem resposta' };
+(() => {
+  const horas = (de, ate) => Array.from({ length: ate - de + 1 }, (_, i) => `<option value="${de + i}">${de + i}h</option>`).join('');
+  $('#ag-inicio').innerHTML = horas(5, 22); $('#ag-fim').innerHTML = horas(6, 23);
+  $('#ag-dias').innerHTML = AG_DIAS.map((d, i) => `<button type="button" class="ag-dia" data-dia="${i}">${d}</button>`).join('');
+})();
+
+function mostrarAgendador({ config: c, agendamentos: todos }) {
+  const agendamentos = todos.filter((a) => a.status !== 'cancelado');
+  $('#ag-ativo').checked = c.ativo;
+  document.querySelectorAll('.ag-dia').forEach((b) => b.classList.toggle('on', c.dias_semana.includes(Number(b.dataset.dia))));
+  $('#ag-inicio').value = c.hora_inicio; $('#ag-fim').value = c.hora_fim;
+  $('#ag-duracao').value = c.duracao_min; $('#ag-intervalo').value = c.intervalo_min;
+  $('#ag-almoco').checked = c.almoco_inicio != null;
+  $('#ag-lista').innerHTML = agendamentos.length
+    ? `<li class="ag-tit">Últimos pedidos</li>` + agendamentos.map((a) => `<li><b>${esc(a.nome || '+' + a.wa_id)}</b>
+        <span>${a.status === 'marcado' && a.inicio ? `${quando(a.inicio)} · ` : ''}${esc(AG_STATUS[a.status] || a.status)}${a.assunto ? ` · ${esc(a.assunto)}` : ''}</span></li>`).join('')
+    : '';
+}
+async function carregarAgendador() { mostrarAgendador(await api('/agendador')); }
+async function salvarAgendador(campos) {
+  try { mostrarAgendador(await api('/agendador', { metodo: 'POST', corpo: campos })); aviso('Agendamento atualizado.'); }
+  catch (e) { aviso(e.message); carregarAgendador().catch(() => {}); }
+}
+$('#ag-ativo').addEventListener('change', (e) => salvarAgendador({ ativo: e.target.checked }));
+$('#ag-almoco').addEventListener('change', (e) => salvarAgendador({ almoco: e.target.checked }));
+$('#ag-dias').addEventListener('click', (e) => {
+  const b = e.target.closest('.ag-dia'); if (!b) return;
+  b.classList.toggle('on');
+  const dias = [...document.querySelectorAll('.ag-dia.on')].map((x) => Number(x.dataset.dia));
+  if (!dias.length) { b.classList.add('on'); aviso('Deixe pelo menos um dia.'); return; }
+  salvarAgendador({ dias_semana: dias });
+});
+for (const [id, campo] of [['#ag-inicio', 'hora_inicio'], ['#ag-fim', 'hora_fim'], ['#ag-duracao', 'duracao_min'], ['#ag-intervalo', 'intervalo_min']]) {
+  $(id).addEventListener('change', (e) => {
+    if (Number($('#ag-fim').value) <= Number($('#ag-inicio').value)) { aviso('O fim do expediente precisa ser depois do início.'); carregarAgendador(); return; }
+    salvarAgendador({ [campo]: Number(e.target.value) });
+  });
+}
 
 // ---- Equipe (administrador) ----
 async function carregarEquipe() {

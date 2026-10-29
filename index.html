@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -323,6 +323,23 @@
         <button id="b-copiar-url" class="btn claro so-dono">Copiar endereço do atalho</button>
         <button id="b-copiar-chave" class="btn claro so-dono">Copiar chave de acesso</button>
       </div>
+      <section id="agendador-sec" class="so-dono" hidden>
+        <h2 class="secao">Agendamento pelo WhatsApp</h2>
+        <div class="ajustes">
+          <label class="linha-switch"><span><b>Marcar reuniões sozinho</b><small>Quando um cliente pede reunião no WhatsApp, eu vejo sua agenda: se o horário está livre, marco e confirmo; se não, mando os horários livres e um link para ele escolher.</small></span>
+            <input type="checkbox" id="ag-ativo" class="switch"></label>
+          <div class="ag-campo"><span>Dias de atendimento</span><div id="ag-dias" class="ag-dias"></div></div>
+          <div class="ag-grade">
+            <label>Das<select id="ag-inicio"></select></label>
+            <label>Até<select id="ag-fim"></select></label>
+            <label>Duração<select id="ag-duracao"><option value="30">30 min</option><option value="45">45 min</option><option value="60">1 h</option><option value="90">1h30</option><option value="120">2 h</option></select></label>
+            <label>Intervalo<select id="ag-intervalo"><option value="0">sem</option><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 h</option></select></label>
+          </div>
+          <label class="linha-switch"><span>Bloquear almoço (12h às 13h)</span><input type="checkbox" id="ag-almoco" class="switch"></label>
+          <p class="dica">Só os horários livres aparecem para o cliente; o que está na sua agenda nunca é mostrado. Pedidos para remarcar ou cancelar chegam para você decidir.</p>
+          <ul id="ag-lista" class="ag-lista"></ul>
+        </div>
+      </section>
       <section id="equipe-sec" hidden>
         <h2 class="secao">Equipe</h2>
         <div class="ajustes">
@@ -388,6 +405,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=17" type="module"></script>
+  <script src="app.js?v=18" type="module"></script>
 </body>
 </html>
