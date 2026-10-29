@@ -1256,6 +1256,19 @@ async function carregarOraculo() {
     : '<li><p class="vazio">Nenhum dossiê ainda. Pesquise o primeiro cliente acima.</p></li>';
 }
 
+// Cartão do Oráculo na tela Hoje: pesquisa direto daqui e abre a tela da pesquisa.
+$('#oraculo-hoje').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const alvo = $('#oraculo-hoje-alvo').value.trim();
+  if (!alvo) { ir('oraculo'); return; }
+  const bt = $('#oraculo-hoje-btn'); bt.disabled = true; bt.textContent = '…';
+  try {
+    const { id } = await api('/dossies', { metodo: 'POST', corpo: { alvo } });
+    $('#oraculo-hoje-alvo').value = '';
+    ir(`dossie/${id}`);
+  } catch (err) { aviso(err.message); } finally { bt.disabled = false; bt.textContent = 'Pesquisar'; }
+});
+
 $('#form-oraculo').addEventListener('submit', async (e) => {
   e.preventDefault();
   const alvo = $('#oraculo-alvo').value.trim();
