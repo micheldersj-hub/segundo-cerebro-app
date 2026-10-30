@@ -21,7 +21,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v22';
+const VERSAO = 'v23';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -1738,7 +1738,7 @@ $('#form-oraculo').addEventListener('submit', async (e) => {
 // ---------------------------------------------------------------------------
 // Região: sua localização atual (só com o app aberto) e empresas por perto
 // ---------------------------------------------------------------------------
-const Geo = { ultimo: null, watch: null, empresas: [] };
+const Geo = { ultimo: null, watch: null, empresas: [], falhaEm: 0, enviando: false };
 const geoLigado = () => guardado.ler('cerebro-geo') === '1';
 const distM = (a, b) => { const R = 6371e3, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r;
   const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
@@ -1749,8 +1749,16 @@ async function enviarLocal(pos, forcar = false) {
   const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
   const u = Geo.ultimo;
   if (!forcar && u && distM(u, p) < 150 && Date.now() - u.t < 10 * 60e3) return u.local;
-  const end = !u || !u.local?.cidade || distM(u, p) >= 150 ? await enderecoNoCelular(p) : null;
-  const { local } = await api('/local', { metodo: 'POST', corpo: { ...p, precisao: Math.round(pos.coords.accuracy || 0), end } });
+  // Se o servidor falhou há pouco, espera 2 min antes de tentar de novo (o GPS dispara várias vezes por minuto).
+  if (!forcar && Geo.falhaEm && Date.now() - Geo.falhaEm < 120e3) return u?.local ?? null;
+  if (Geo.enviando) return u?.local ?? null;
+  Geo.enviando = true;
+  let local;
+  try {
+    const end = !u || !u.local?.cidade || distM(u, p) >= 150 ? await enderecoNoCelular(p) : null;
+    ({ local } = await api('/local', { metodo: 'POST', corpo: { ...p, precisao: Math.round(pos.coords.accuracy || 0), end } }));
+    Geo.falhaEm = 0;
+  } catch (e) { Geo.falhaEm = Date.now(); throw e; } finally { Geo.enviando = false; }
   Geo.ultimo = { ...p, t: Date.now(), local };
   mostrarOnde(local);
   return local;
