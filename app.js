@@ -20,6 +20,21 @@ const guardado = {
 };
 let chave = guardado.ler(CHAVE);
 
+// Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
+const VERSAO = 'v22';
+const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
+function diag(evento, detalhe = '') {
+  try {
+    fetch('https://mavjbevuhzalkqyxaajw.supabase.co/rest/v1/app_diag', {
+      method: 'POST', keepalive: true,
+      headers: { apikey: ANON, authorization: `Bearer ${ANON}`, 'content-type': 'application/json', prefer: 'return=minimal' },
+      body: JSON.stringify({ versao: VERSAO, ua: navigator.userAgent.slice(0, 300), evento: String(evento).slice(0, 60), detalhe: String(detalhe ?? '').slice(0, 1000) }),
+    }).catch(() => {});
+  } catch { /* sem rede */ }
+}
+window.addEventListener('error', (e) => diag('erro', `${e.message} @${(e.filename || '').split('/').pop()}:${e.lineno}`));
+window.addEventListener('unhandledrejection', (e) => diag('promessa', e.reason?.message || String(e.reason)));
+
 // ---- Tema: automático (segue o iPhone) → claro → escuro ----
 const TEMAS = ['auto', 'claro', 'escuro'];
 function aplicarTema(t) {
@@ -2268,6 +2283,7 @@ const Voz = { estado: 'parado', stream: null, mr: null, pedacos: [], ctx: null, 
 const VOZ_LIMITE_MS = 40000, VOZ_SILENCIO_MS = 1300, VOZ_ESPERA_MS = 7000;
 
 function vozUI(estado, texto) {
+  if (estado !== Voz.estado) Voz.desde = Date.now();
   Voz.estado = estado;
   const painel = $('#voz');
   painel.dataset.estado = estado;
@@ -2292,8 +2308,14 @@ function fecharVoz() {
 }
 
 async function ouvirComando() {
+  try { await ouvirComandoInterno(); }
+  catch (e) { diag('voz-erro', e?.message || String(e)); vozUI('erro', `Não consegui ouvir: ${e?.message || 'erro'}. Toque de novo.`); Voz.estado = 'parado'; }
+}
+async function ouvirComandoInterno() {
+  diag('voz-toque', `estado=${Voz.estado}`);
   if (Voz.estado === 'ouvindo') { pararEscuta(true); return; }
-  if (Voz.estado === 'pensando') return;
+  // Preso em "pensando" (resposta que nunca voltou)? Libera depois de 45 s.
+  if (Voz.estado === 'pensando' && Date.now() - (Voz.desde || 0) < 45000) return;
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { aviso('Este aparelho não grava áudio pelo app.'); return; }
   if (Rec.ativo) { aviso('Há uma gravação em andamento. Pare a gravação para usar o comando de voz.'); return; }
   if (typeof Dimy !== 'undefined' && Dimy.ligado) desligarDimy('Mãos-livres pausado para o comando de voz.');
@@ -2301,9 +2323,9 @@ async function ouvirComando() {
   try { speechSynthesis.cancel(); } catch { /* sem voz */ }
   // iPhone: a voz só toca depois de liberada por um toque; libera agora, no toque do microfone.
   if (!Voz.liberou) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch { /* sem voz */ } Voz.liberou = true; }
-  atualizarLocalSilencioso();
+  atualizarLocalSilencioso().catch(() => {});
   try { Voz.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
-  catch { vozUI('erro', 'Libere o microfone para o app nos Ajustes do iPhone.'); return; }
+  catch (e) { diag('voz-mic', `${e?.name}: ${e?.message}`); vozUI('erro', 'Libere o microfone para o app nos Ajustes do iPhone.'); return; }
   const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
   Voz.pedacos = []; Voz.falou = false; Voz.inicio = performance.now(); Voz.ultimaFala = 0; Voz.base = 0.006;
   Voz.mr = new MediaRecorder(Voz.stream, tipo ? { mimeType: tipo } : undefined);
@@ -2361,13 +2383,14 @@ async function enviarComando() {
   const audio = new Blob(Voz.pedacos, { type: mime });
   Voz.mr = null;
   if (!Voz.enviar) return;
+  diag('voz-audio', `${audio.size} bytes ${mime}`);
   if (audio.size < 1500) { vozUI('parado', 'Muito curto. Toque e fale de novo.'); return; }
   vozUI('pensando', 'Entendendo…');
   try {
     const r = await api('/audio?voz=1', { metodo: 'POST', corpo: audio, tipo: mime });
     if (r.ignorado || !r.resposta) { vozUI('parado', 'Não entendi. Toque e fale de novo.'); return; }
     await mostrarRespostaVoz(r.texto, r.resposta, r.acoes || []);
-  } catch (e) { vozUI('erro', e.message || 'Falhou. Tente de novo.'); }
+  } catch (e) { diag('voz-envio', e.message); vozUI('erro', e.message || 'Falhou. Tente de novo.'); }
 }
 
 async function comandoTexto(texto) {
@@ -2432,6 +2455,7 @@ bVoz.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   try { bVoz.setPointerCapture(e.pointerId); } catch { /* sem captura */ }
   Voz.apertou = performance.now();
+  diag('voz-aperto', `${e.pointerType} estado=${Voz.estado}`);
   Voz.timerSegurar = setTimeout(() => { if (Voz.estado !== 'ouvindo') { Voz.segurando = true; ouvirComando(); } }, 350);
 });
 const soltarVoz = () => {
@@ -2440,7 +2464,7 @@ const soltarVoz = () => {
   if (performance.now() - Voz.apertou < 350) ouvirComando();
 };
 bVoz.addEventListener('pointerup', soltarVoz);
-bVoz.addEventListener('pointercancel', () => { clearTimeout(Voz.timerSegurar); if (Voz.segurando) { Voz.segurando = false; pararEscuta(true); } });
+bVoz.addEventListener('pointercancel', () => { diag('voz-cancel', `segurando=${Voz.segurando}`); clearTimeout(Voz.timerSegurar); if (Voz.segurando) { Voz.segurando = false; pararEscuta(true); } });
 bVoz.addEventListener('contextmenu', (e) => e.preventDefault());
 $('#voz-orbe').addEventListener('click', () => ouvirComando());
 $('#voz').addEventListener('click', (e) => {
