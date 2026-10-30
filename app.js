@@ -5,6 +5,7 @@ const GRAVADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/gravador
 const ORACULO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/oraculo';
 const EQUIPE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/equipe';
 const EXTRA = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/extra';
+const DOCUMENTO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/documento';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -21,7 +22,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v23';
+const VERSAO = 'v24';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -67,7 +68,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -531,7 +532,7 @@ async function carregarConversa() {
 const texto = $('#texto');
 texto.addEventListener('input', () => {
   texto.style.height = 'auto'; texto.style.height = Math.min(texto.scrollHeight, 140) + 'px';
-  const tem = !!texto.value.trim();
+  const tem = !!texto.value.trim() || !!(Anexo.atual?.pronto && !Anexo.atual.enviado);
   $('#enviar').hidden = !tem; $('#mic').hidden = tem;
 });
 texto.addEventListener('keydown', (e) => {
@@ -541,6 +542,7 @@ texto.addEventListener('keydown', (e) => {
 $('#form-chat').addEventListener('submit', async (e) => {
   e.preventDefault();
   const t = texto.value.trim();
+  if (Anexo.atual?.pronto) { enviarDocumento(t); return; }
   if (!t) return;
   texto.value = ''; texto.dispatchEvent(new Event('input'));
   bolha('eu', t, new Date().toISOString());
@@ -552,6 +554,114 @@ $('#form-chat').addEventListener('submit', async (e) => {
     pensando.remove(); bolha('ia', `Não consegui responder: ${err.message}. Sua mensagem não se perdeu; tente de novo.`);
   }
 });
+
+// ---- Anexar documento: o Dimy analisa PDF, foto, Word, Excel, CSV e texto ----
+// Enquanto o arquivo estiver no chip, as próximas perguntas da conversa também olham para ele.
+const Anexo = { atual: null };
+const TAM_MAX = 20 * 1024 * 1024;
+const fmtTam = (b) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} MB`);
+function mostrarAnexo() {
+  const a = Anexo.atual, chip = $('#anexo-chip');
+  $('#anexar').classList.toggle('ativo', !!a);
+  if (!a) { chip.hidden = true; texto.placeholder = 'Escreva ou toque no microfone'; texto.dispatchEvent(new Event('input')); return; }
+  chip.hidden = false;
+  chip.classList.toggle('carregando', !a.pronto && !a.erro);
+  $('#anexo-nome').textContent = a.nome;
+  $('#anexo-estado').textContent = a.erro ? a.erro : !a.pronto ? 'Preparando' : a.enviado
+    ? 'Pergunte mais sobre este arquivo, ou toque em ✕ para tirar' : `${fmtTam(a.tamanho)} · escreva o que quer saber ou só envie`;
+  texto.placeholder = a.pronto ? 'O que você quer saber do arquivo?' : 'Escreva ou toque no microfone';
+  texto.dispatchEvent(new Event('input'));
+}
+$('#anexar').addEventListener('click', () => { diag('anexo-toque'); $('#arquivo').click(); });
+$('#anexo-tirar').addEventListener('click', () => { Anexo.atual = null; mostrarAnexo(); });
+$('#arquivo').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0];
+  e.target.value = '';
+  if (!f) return;
+  const a = { nome: f.name || 'arquivo', tamanho: f.size, id: crypto.randomUUID(), pronto: false, enviado: false };
+  Anexo.atual = a; mostrarAnexo();
+  try {
+    if (f.size > TAM_MAX) throw new Error(`Arquivo grande demais (${fmtTam(f.size)}). O limite é 20 MB.`);
+    Object.assign(a, await lerArquivo(f));
+    a.pronto = true;
+  } catch (err) {
+    a.erro = err.message || 'Não consegui ler esse arquivo.';
+    diag('anexo-erro', `${f.type} ${a.erro}`);
+  }
+  if (Anexo.atual === a) { mostrarAnexo(); if (a.pronto) texto.focus({ preventScroll: true }); }
+});
+
+function base64De(blob) {
+  return new Promise((ok, erro) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(',')[1] || '');
+    r.onerror = () => erro(new Error('Não consegui ler o arquivo.'));
+    r.readAsDataURL(blob);
+  });
+}
+async function imagemReduzida(f) {
+  const url = URL.createObjectURL(f);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const lado = 1568, k = Math.min(1, lado / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+    if (!blob) throw new Error('Não consegui abrir a imagem.');
+    return { tipo: 'image/jpeg', base64: await base64De(blob) };
+  } finally { URL.revokeObjectURL(url); }
+}
+const xmlTexto = (xml) => xml
+  .replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n').replace(/<\/w:p>/g, '\n').replace(/<\/w:tc>/g, '\t')
+  .replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+  .replace(/\n{3,}/g, '\n\n').trim();
+async function textoDoWord(f) {
+  const { unzipSync, strFromU8 } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm');
+  const z = unzipSync(new Uint8Array(await f.arrayBuffer()));
+  const partes = Object.keys(z).filter((k) => /^word\/(document|header\d*|footer\d*|footnotes)\.xml$/.test(k)).sort((x) => (x === 'word/document.xml' ? -1 : 1));
+  if (!partes.length) throw new Error('Esse Word não abriu. Salve como PDF e tente de novo.');
+  return partes.map((k) => xmlTexto(strFromU8(z[k]))).filter(Boolean).join('\n\n');
+}
+async function textoDoExcel(f) {
+  const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs');
+  const wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array', cellDates: true });
+  return wb.SheetNames.map((n) => `### Aba: ${n}\n${XLSX.utils.sheet_to_csv(wb.Sheets[n], { FS: ';', blankrows: false })}`).join('\n\n');
+}
+async function lerArquivo(f) {
+  const nome = (f.name || '').toLowerCase(), tipo = f.type || '';
+  if (tipo === 'application/pdf' || nome.endsWith('.pdf')) return { tipo: 'application/pdf', base64: await base64De(f) };
+  if (tipo.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp|gif)$/.test(nome)) return imagemReduzida(f);
+  if (nome.endsWith('.docx')) return { tipo: 'text/plain', texto: await textoDoWord(f) };
+  if (/\.xlsx?$/.test(nome)) return { tipo: 'text/plain', texto: await textoDoExcel(f) };
+  if (nome.endsWith('.doc')) throw new Error('Word antigo (.doc) não abre aqui. Salve como .docx ou PDF.');
+  if (tipo.startsWith('text/') || /\.(csv|txt|md|json|xml|html?)$/.test(nome)) return { tipo: 'text/plain', texto: await f.text() };
+  throw new Error('Esse tipo de arquivo eu ainda não leio. Mande em PDF, foto, Word, Excel, CSV ou texto.');
+}
+
+async function enviarDocumento(pergunta) {
+  const a = Anexo.atual;
+  if (!a?.pronto || a.ocupado) return;
+  a.ocupado = true;
+  texto.value = ''; texto.dispatchEvent(new Event('input'));
+  bolha('eu', `📎 ${a.nome}${pergunta ? `\n${pergunta}` : ''}`, new Date().toISOString());
+  const pensando = bolha('ia', a.enviado ? 'Pensando' : 'Lendo o arquivo', null, 'pensando');
+  diag('anexo-envio', `${a.tipo} ${a.tamanho}`);
+  try {
+    const { resposta } = await api('/documento', { metodo: 'POST', corpo: {
+      nome: a.nome, tipo: a.tipo, base64: a.base64, texto: a.texto, pergunta, id: a.id, primeira: !a.enviado,
+    } });
+    pensando.remove(); bolha('ia', resposta, new Date().toISOString());
+    a.enviado = true;
+  } catch (err) {
+    pensando.remove(); bolha('ia', `Não consegui analisar o arquivo: ${err.message}. Tente de novo.`);
+  } finally {
+    a.ocupado = false;
+    if (Anexo.atual === a) mostrarAnexo();
+  }
+}
 
 // Áudio: toque para gravar, toque de novo para enviar.
 let gravador = null, pedacos = [];

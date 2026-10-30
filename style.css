@@ -226,6 +226,15 @@ input[type="date"], input[type="time"] { -webkit-appearance: none; appearance: n
 .compositor textarea { resize: none; max-height: 140px; border-radius: 24px; background: var(--superficie); box-shadow: var(--sombra); border-color: transparent; }
 .redondo { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 0; display: grid; place-items: center; background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra); }
 .redondo.primario { background: var(--mar); color: #fff; }
+#anexar svg { width: 22px; height: 22px; fill: currentColor; }
+#anexar.ativo { background: var(--mar); color: #fff; }
+.anexo-chip { position: sticky; bottom: calc(154px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; margin: 0 0 -4px; padding: 10px 12px; border-radius: 16px; background: var(--superficie); box-shadow: var(--sombra); z-index: 2; }
+.anexo-ic { font-size: 20px; }
+.anexo-info { flex: 1; min-width: 0; display: grid; }
+.anexo-info strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+.anexo-info small { color: var(--tinta-suave, #8a94a6); font-size: 12.5px; }
+.anexo-x { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: inherit; font-size: 16px; }
+.anexo-chip.carregando small::after { content: '…'; }
 .redondo.gravando { background: var(--gravar); color: #fff; animation: pulso 1.4s infinite; }
 @keyframes pulso { 50% { transform: scale(1.08); } }
 

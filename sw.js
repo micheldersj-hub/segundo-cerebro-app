@@ -1,5 +1,5 @@
 // Service worker do Segundo Cérebro: guarda a "casca" do app e recebe notificações push.
-const CACHE = 'cerebro-v23';
+const CACHE = 'cerebro-v24';
 const V = '?v=22';
 const SHELL = ['./', './index.html', './app.js' + V, './style.css' + V, './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
