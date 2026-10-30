@@ -22,7 +22,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v24';
+const VERSAO = 'v25';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -614,31 +614,153 @@ async function imagemReduzida(f) {
     return { tipo: 'image/jpeg', base64: await base64De(blob) };
   } finally { URL.revokeObjectURL(url); }
 }
-const xmlTexto = (xml) => xml
-  .replace(/<w:tab\/>/g, '\t').replace(/<w:br[^>]*\/>/g, '\n').replace(/<\/w:p>/g, '\n').replace(/<\/w:tc>/g, '\t')
-  .replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
-  .replace(/\n{3,}/g, '\n\n').trim();
+// Textos de XML (Word, PowerPoint, OpenDocument): parágrafo vira linha, célula vira tab.
+const desXml = (t) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&');
+const xmlTexto = (xml) => desXml(xml
+  .replace(/<(w:tab|text:tab)\/>/g, '\t').replace(/<(w:br|a:br|text:line-break)[^>]*\/>/g, '\n')
+  .replace(/<\/(w:p|text:p)>\s*<\/(w:tc|table:table-cell)>/g, ' | ').replace(/<\/(w:tr|table:table-row)>/g, '\n')
+  .replace(/<\/(w:p|a:p|text:p|text:h)>/g, '\n').replace(/<\/(w:tc|table:table-cell)>/g, ' | ')
+  .replace(/<[^>]+>/g, '')).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+const fflate = () => import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm');
+async function abrirZip(f) {
+  const { unzipSync } = await fflate();
+  try { return unzipSync(new Uint8Array(await f.arrayBuffer())); } catch { throw new Error('O arquivo parece corrompido ou protegido por senha.'); }
+}
+const ordemNatural = (a, b) => a.localeCompare(b, undefined, { numeric: true });
 async function textoDoWord(f) {
-  const { unzipSync, strFromU8 } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/+esm');
-  const z = unzipSync(new Uint8Array(await f.arrayBuffer()));
-  const partes = Object.keys(z).filter((k) => /^word\/(document|header\d*|footer\d*|footnotes)\.xml$/.test(k)).sort((x) => (x === 'word/document.xml' ? -1 : 1));
+  const { strFromU8 } = await fflate();
+  const z = await abrirZip(f);
+  const partes = Object.keys(z).filter((k) => /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/.test(k))
+    .sort((a) => (a === 'word/document.xml' ? -1 : 1));
   if (!partes.length) throw new Error('Esse Word não abriu. Salve como PDF e tente de novo.');
   return partes.map((k) => xmlTexto(strFromU8(z[k]))).filter(Boolean).join('\n\n');
+}
+async function textoDoPowerPoint(f) {
+  const { strFromU8 } = await fflate();
+  const z = await abrirZip(f);
+  const slides = Object.keys(z).filter((k) => /^ppt\/slides\/slide\d+\.xml$/.test(k)).sort(ordemNatural);
+  if (!slides.length) throw new Error('Essa apresentação não abriu. Exporte em PDF e tente de novo.');
+  return slides.map((k, n) => {
+    const nota = z[k.replace('slides/slide', 'notesSlides/notesSlide')];
+    return `--- Slide ${n + 1} ---\n${xmlTexto(strFromU8(z[k]))}${nota ? `\n[Notas] ${xmlTexto(strFromU8(nota))}` : ''}`;
+  }).join('\n\n');
+}
+async function textoDoOpenDocument(f) {
+  const { strFromU8 } = await fflate();
+  const z = await abrirZip(f);
+  if (!z['content.xml']) throw new Error('Esse arquivo não abriu. Exporte em PDF e tente de novo.');
+  return xmlTexto(strFromU8(z['content.xml']).replace(/<\/draw:page>/g, '\n\n'));
 }
 async function textoDoExcel(f) {
   const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs');
   const wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array', cellDates: true });
   return wb.SheetNames.map((n) => `### Aba: ${n}\n${XLSX.utils.sheet_to_csv(wb.Sheets[n], { FS: ';', blankrows: false })}`).join('\n\n');
 }
+// Pages, Numbers e Keynote (Apple) guardam uma prévia em PDF ou imagem dentro do pacote.
+async function previaApple(f) {
+  const z = await abrirZip(f);
+  const pdf = Object.keys(z).find((k) => /(^|\/)(QuickLook\/)?Preview\.pdf$/i.test(k));
+  if (pdf) return { tipo: 'application/pdf', base64: await base64De(new Blob([z[pdf]])) };
+  const img = Object.keys(z).find((k) => /preview(-web)?\.(jpe?g|png)$/i.test(k));
+  if (img) return imagemReduzida(new File([z[img]], img, { type: /png$/i.test(img) ? 'image/png' : 'image/jpeg' }));
+  throw new Error('Não achei o conteúdo desse arquivo da Apple. No app, use Exportar → PDF e mande o PDF.');
+}
+// ZIP: lista o que tem dentro e lê os arquivos de texto (CSV, TXT, XML…).
+async function textoDoZip(f) {
+  const { strFromU8 } = await fflate();
+  const z = await abrirZip(f);
+  const nomes = Object.keys(z).filter((k) => !k.endsWith('/') && !k.startsWith('__MACOSX'));
+  let total = 0;
+  const textos = nomes.filter((k) => /\.(txt|csv|tsv|md|json|xml|html?|log|ics|vcf|eml|ya?ml|sql)$/i.test(k)).map((k) => {
+    if (total > 150_000) return '';
+    const t = strFromU8(z[k]).slice(0, 40_000); total += t.length;
+    return `--- ${k} ---\n${t}`;
+  }).filter(Boolean);
+  return `Arquivos dentro do ZIP (${nomes.length}):\n${nomes.slice(0, 300).map((k) => `• ${k} (${fmtTam(z[k].length)})`).join('\n')}${textos.length ? `\n\n${textos.join('\n\n')}` : ''}`;
+}
+// RTF: lê o texto ignorando tabelas de fonte, cores, estilos e imagens.
+function textoDoRtf(rtf) {
+  const PULAR = new Set(['fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'listtable', 'listoverridetable', 'rsidtbl', 'generator', 'xmlnstbl', 'themedata', 'colorschememapping', 'latentstyles', 'datastore', 'object', 'header', 'footer', 'headerl', 'headerr', 'footerl', 'footerr']);
+  const pilha = []; let pular = false, out = '', i = 0, uc = 1, ignorarProx = 0;
+  while (i < rtf.length) {
+    const c = rtf[i];
+    if (c === '{') { pilha.push(pular); i++; continue; }
+    if (c === '}') { pular = pilha.pop() ?? false; i++; continue; }
+    if (c === '\\') {
+      const m = /^\\(?:([a-zA-Z]+)(-?\d+)? ?|'([0-9a-fA-F]{2})|([^a-zA-Z]))/.exec(rtf.slice(i, i + 40));
+      if (!m) { i++; continue; }
+      i += m[0].length;
+      if (m[4]) { if (m[4] === '*') pular = true; else if (!pular && /[\\{}]/.test(m[4])) out += m[4]; else if (!pular && m[4] === '~') out += ' '; continue; }
+      if (m[3]) { if (ignorarProx) { ignorarProx--; continue; } if (!pular) out += new TextDecoder('windows-1252').decode(new Uint8Array([parseInt(m[3], 16)])); continue; }
+      const w = m[1], n = m[2];
+      if (PULAR.has(w)) { pular = true; continue; }
+      if (pular) continue;
+      if (w === 'uc') uc = +n;
+      else if (w === 'u') { out += String.fromCharCode(+n < 0 ? 65536 + +n : +n); ignorarProx = uc; }
+      else if (w === 'par' || w === 'line' || w === 'row') out += '\n';
+      else if (w === 'tab' || w === 'cell') out += w === 'cell' ? ' | ' : '\t';
+      continue;
+    }
+    if (c === '\r' || c === '\n') { i++; continue; }
+    if (!pular) { if (ignorarProx) ignorarProx--; else out += c; }
+    i++;
+  }
+  return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+// Formatos binários antigos (.doc, .ppt, .msg…): recupera os trechos de texto legíveis.
+function textoDeBinario(buf) {
+  const b = new Uint8Array(buf);
+  const RUIDO = /^(Root Entry|Normal|Heading \d|Default Paragraph Font|Table Normal|No List|WordDocument|SummaryInformation|DocumentSummaryInformation|CompObj|Times New Roman|Arial|Symbol|Calibri|Cambria|Liberation \w+|Microsoft Word.*|Title|Subtitle|.{1,40} Char|ListLabel \d+|Heading.{0,20}|Body Text.{0,4}|Caption|Header and Footer|Header|Footer|Strong|Emphasis|(Subtle|Intense) (Emphasis|Reference|Quote)|Book Title|Quote|Macro Text|List( Paragraph)?|Index|Contents \d+|Table Contents|Table Heading|Default.{0,30}|Hyperlink|Balloon Text|Footnote.{0,10}|Endnote.{0,10}|Page Number|Line Number|Placeholder Text)$/;
+  const pedacos = (dec) => (dec.match(/[\p{Script=Latin}\p{N}\p{P}\p{Zs}\n\t€$%+=<>|]{6,}/gu) || [])
+    .map((t) => t.replace(/(.)\1{4,}/gu, '$1').trim()).filter((t) => t.length >= 6 && /\p{L}{3}/u.test(t) && new Set(t.replace(/\P{L}/gu, '')).size >= 4 && !RUIDO.test(t));
+  const u16 = pedacos(new TextDecoder('utf-16le').decode(b.length % 2 ? b.slice(0, -1) : b));
+  const l1 = pedacos(new TextDecoder('windows-1252').decode(b));
+  const melhor = u16.join('').length > l1.join('').length ? u16 : l1;
+  return melhor.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+const pareceTexto = (buf) => {
+  const b = new Uint8Array(buf.slice(0, 4096));
+  if (!b.length) return false;
+  let ruins = 0;
+  for (const c of b) if (c === 0 || (c < 9) || (c > 13 && c < 32)) ruins++;
+  return ruins / b.length < 0.02;
+};
+const decodificarTexto = (buf) => {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return new TextDecoder('windows-1252').decode(buf); }
+};
+const AUDIO = { mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', webm: 'audio/webm', flac: 'audio/flac', amr: 'audio/amr', caf: 'audio/x-caf' };
+const VIDEO = { mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/mp4', webm: 'video/webm', mpeg: 'video/mpeg', mpg: 'video/mpeg' };
 async function lerArquivo(f) {
-  const nome = (f.name || '').toLowerCase(), tipo = f.type || '';
-  if (tipo === 'application/pdf' || nome.endsWith('.pdf')) return { tipo: 'application/pdf', base64: await base64De(f) };
-  if (tipo.startsWith('image/') || /\.(jpe?g|png|heic|heif|webp|gif)$/.test(nome)) return imagemReduzida(f);
-  if (nome.endsWith('.docx')) return { tipo: 'text/plain', texto: await textoDoWord(f) };
-  if (/\.xlsx?$/.test(nome)) return { tipo: 'text/plain', texto: await textoDoExcel(f) };
-  if (nome.endsWith('.doc')) throw new Error('Word antigo (.doc) não abre aqui. Salve como .docx ou PDF.');
-  if (tipo.startsWith('text/') || /\.(csv|txt|md|json|xml|html?)$/.test(nome)) return { tipo: 'text/plain', texto: await f.text() };
-  throw new Error('Esse tipo de arquivo eu ainda não leio. Mande em PDF, foto, Word, Excel, CSV ou texto.');
+  const nome = (f.name || '').toLowerCase(), tipo = f.type || '', ext = (nome.match(/\.([a-z0-9]+)$/) || [])[1] || '';
+  const texto = (t) => { if (!String(t || '').trim()) throw new Error('Esse arquivo está vazio ou não tem texto que eu consiga ler.'); return { tipo: 'text/plain', texto: t }; };
+  // Documentos
+  if (tipo === 'application/pdf' || ext === 'pdf') return { tipo: 'application/pdf', base64: await base64De(f) };
+  if (['docx', 'docm', 'dotx', 'dotm'].includes(ext)) return texto(await textoDoWord(f));
+  if (['pptx', 'pptm', 'ppsx', 'potx'].includes(ext)) return texto(await textoDoPowerPoint(f));
+  if (['xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods'].includes(ext)) return texto(await textoDoExcel(f));
+  if (['odt', 'odp', 'odg'].includes(ext)) return texto(await textoDoOpenDocument(f));
+  if (ext === 'numbers') { try { return texto(await textoDoExcel(f)); } catch { return previaApple(f); } }
+  if (['pages', 'key'].includes(ext)) return previaApple(f);
+  if (ext === 'rtf' || tipo === 'application/rtf') return texto(textoDoRtf(await f.text()));
+  if (ext === 'zip' || tipo === 'application/zip') return texto(await textoDoZip(f));
+  // Imagens (o iPhone converte HEIC ao abrir)
+  if (tipo.startsWith('image/svg') || ext === 'svg') return texto(await f.text());
+  if (tipo.startsWith('image/') || ['jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'avif'].includes(ext)) {
+    try { return await imagemReduzida(f); } catch { throw new Error('Não consegui abrir essa imagem. Tire um print dela e mande o print.'); }
+  }
+  // Áudio e vídeo: o servidor transcreve (até 20 MB)
+  if (tipo.startsWith('audio/') || AUDIO[ext]) return { tipo: AUDIO[ext] || tipo, base64: await base64De(f) };
+  if (tipo.startsWith('video/') || VIDEO[ext]) return { tipo: VIDEO[ext] || tipo, base64: await base64De(f) };
+  // Qualquer outro: se for texto (CSV, TXT, JSON, XML, HTML, e-mail, código…), lê como texto; se for binário, recupera o legível.
+  const buf = await f.arrayBuffer();
+  if (pareceTexto(buf)) {
+    let t = decodificarTexto(buf);
+    if (/^\s*<(!doctype html|html)/i.test(t)) t = new DOMParser().parseFromString(t, 'text/html').body?.innerText || t;
+    return texto(t);
+  }
+  const rec = textoDeBinario(buf);
+  if (rec.length < 40) throw new Error(`Não consegui tirar texto desse arquivo (.${ext || '?'}). Se puder, exporte em PDF e mande de novo.`);
+  return texto(`[Texto recuperado de um arquivo .${ext || 'binário'}; a formatação pode ter se perdido]\n${rec}`);
 }
 
 async function enviarDocumento(pergunta) {
@@ -647,14 +769,16 @@ async function enviarDocumento(pergunta) {
   a.ocupado = true;
   texto.value = ''; texto.dispatchEvent(new Event('input'));
   bolha('eu', `📎 ${a.nome}${pergunta ? `\n${pergunta}` : ''}`, new Date().toISOString());
-  const pensando = bolha('ia', a.enviado ? 'Pensando' : 'Lendo o arquivo', null, 'pensando');
+  const pensando = bolha('ia', a.enviado ? 'Pensando' : /^(audio|video)\//.test(a.tipo) ? 'Ouvindo o arquivo' : 'Lendo o arquivo', null, 'pensando');
   diag('anexo-envio', `${a.tipo} ${a.tamanho}`);
   try {
-    const { resposta } = await api('/documento', { metodo: 'POST', corpo: {
+    const r = await api('/documento', { metodo: 'POST', corpo: {
       nome: a.nome, tipo: a.tipo, base64: a.base64, texto: a.texto, pergunta, id: a.id, primeira: !a.enviado,
     } });
+    const { resposta } = r;
     pensando.remove(); bolha('ia', resposta, new Date().toISOString());
     a.enviado = true;
+    if (r.texto) { a.texto = r.texto; a.base64 = undefined; a.tipo = 'text/plain'; }
   } catch (err) {
     pensando.remove(); bolha('ia', `Não consegui analisar o arquivo: ${err.message}. Tente de novo.`);
   } finally {
