@@ -754,3 +754,33 @@ body.com-voz { overflow: hidden; }
 .noticia a { font-size: 13px; color: var(--mar-forte); text-decoration: none; font-weight: 700; }
 .radar-acoes { display: flex; gap: 8px; margin-top: 10px; }
 .radar-acoes .btn { flex: 1; }
+
+/* ---------- v21: semana com botão para o mês, atalhos maiores, Oráculo compacto ---------- */
+.calendario .semana { box-shadow: none; padding: 2px 0 0; background: transparent; }
+.calendario .semana .dia { padding: 8px 0 6px; }
+.calendario .semana .dia-n { font-size: 17px; font-weight: 700; }
+.calendario .semana .dia.fds .dia-n { color: var(--tinta-suave); }
+.calendario .semana .dia.sel .dia-n, .calendario .semana .dia.sel .dia-l { color: #fff; }
+.cal-expandir { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; border: 0; background: none; color: var(--tinta-suave); font-weight: 700; font-size: 12.5px; padding: 6px 0 0; }
+.cal-expandir svg { width: 16px; height: 16px; transition: transform .2s; }
+.cal-expandir[aria-expanded="true"] svg { transform: rotate(180deg); }
+
+.atalhos { grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 4px; }
+.atalho { padding: 10px 4px 9px; gap: 6px; font-size: 13.5px; font-weight: 700; border-radius: 20px; }
+.atalho .ic { width: 54px; height: 54px; border-radius: 17px; position: relative; }
+.atalho .ic svg { width: 29px; height: 29px; stroke-width: 1.8; }
+.atalho .badge { top: -6px; left: auto; right: -8px; }
+
+.oraculo-hoje { padding: 10px; gap: 10px; border-radius: 22px; }
+.oh-busca { align-items: center; padding: 5px; border-radius: 16px; }
+.oh-busca .oh-ic { width: 38px; height: 38px; border-radius: 12px; background: #EDE5FF; color: #6D28D9; }
+.oh-busca .oh-ic svg { width: 21px; height: 21px; }
+.oh-busca input { padding: 10px 4px; }
+.oh-mic { width: 40px; height: 40px; }
+.oh-botao { width: 42px; height: 40px; padding: 0; display: grid; place-items: center; }
+.oh-botao svg { width: 20px; height: 20px; stroke-width: 2.4; }
+.oh-segs { margin: 0 -10px; padding: 0 10px 2px; }
+.oh-segs .oh-perto { background: #fff; color: #6D28D9; border-color: #fff; display: inline-flex; align-items: center; gap: 5px; font-weight: 800; padding: 7px 12px; justify-self: auto; font-size: 13px; }
+.oh-segs .oh-perto svg { width: 15px; height: 15px; }
+.oh-segs .oh-dossies { border-style: dashed; }
+.oraculo-hoje:focus-within .oh-busca { box-shadow: 0 0 0 3px rgba(255,255,255,.35); }

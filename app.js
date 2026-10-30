@@ -219,7 +219,9 @@ function blocoRota(l) {
   </div>`;
 }
 
-const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true, mes: diaISO(new Date()).slice(0, 7), mexeu: 0 };
+const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true, mes: diaISO(new Date()).slice(0, 7), mexeu: 0, aberto: guardado.ler('cerebro-cal') === 'mes' };
+// Semana (padrão, compacta) ou mês inteiro (expandido pelo botão).
+const gradeAtual = () => (Agenda.aberto ? gradeDoMes(Agenda.mes) : { ini: inicioDaSemana(Agenda.dia), dias: 7 });
 function inicioDaSemana(dia) { return somaDias(dia, -((diaSemana(dia) + 6) % 7)); } // segunda-feira
 // Grade do mês: começa na segunda-feira da semana do dia 1 e vai até o domingo da última semana.
 function gradeDoMes(mes) {
@@ -268,9 +270,10 @@ function quandoCurto(iso) {
 }
 
 async function carregarSemana() {
-  const { ini, dias } = gradeDoMes(Agenda.mes);
-  if (ini !== Agenda.inicioSemana) {
-    Agenda.inicioSemana = ini;
+  const { ini, dias } = gradeAtual();
+  const chave = `${ini}/${dias}`;
+  if (chave !== Agenda.inicioSemana) {
+    Agenda.inicioSemana = chave;
     try {
       const r = await api(`/agenda?de=${ini}&dias=${dias}`);
       Agenda.google = r.google; Agenda.eventos = Array.isArray(r.eventos) ? r.eventos : [];
@@ -280,16 +283,24 @@ async function carregarSemana() {
 }
 
 function desenharSemana() {
-  const { ini, dias } = gradeDoMes(Agenda.mes), hoje = diaISO(new Date());
-  $('#sem-mes').textContent = nomeDia(`${Agenda.mes}-15`, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
-  $('#cal-hoje').hidden = Agenda.dia === hoje && Agenda.mes === hoje.slice(0, 7);
+  const { ini, dias } = gradeAtual(), hoje = diaISO(new Date());
+  const ref = Agenda.aberto ? `${Agenda.mes}-15` : somaDias(ini, 3);
+  $('#sem-mes').textContent = nomeDia(ref, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
+  $('#cal-hoje').hidden = Agenda.dia === hoje && (Agenda.aberto ? Agenda.mes === hoje.slice(0, 7) : ini === inicioDaSemana(hoje));
+  $('#semana').className = Agenda.aberto ? 'mes' : 'semana';
+  $('#mes-letras').hidden = !Agenda.aberto;
+  $('#cal-expandir').setAttribute('aria-expanded', String(Agenda.aberto));
+  $('#cal-expandir-t').textContent = Agenda.aberto ? 'Recolher' : 'Ver mês';
+  $('#sem-ant').setAttribute('aria-label', Agenda.aberto ? 'Mês anterior' : 'Semana anterior');
+  $('#sem-prox').setAttribute('aria-label', Agenda.aberto ? 'Próximo mês' : 'Próxima semana');
+  const LETRAS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
   const porDia = {};
   for (const e of Agenda.eventos) { const k = diaISO(e.inicio); porDia[k] = (porDia[k] || 0) + 1; }
   $('#semana').innerHTML = Array.from({ length: dias }, (_, k) => {
     const dia = somaDias(ini, k), n = porDia[dia] || 0, ds = diaSemana(dia);
-    const cls = ['dia', dia === Agenda.dia ? 'sel' : '', dia === hoje ? 'hoje' : '', dia.slice(0, 7) !== Agenda.mes ? 'fora' : '', ds === 0 || ds === 6 ? 'fds' : ''].join(' ');
+    const cls = ['dia', dia === Agenda.dia ? 'sel' : '', dia === hoje ? 'hoje' : '', Agenda.aberto && dia.slice(0, 7) !== Agenda.mes ? 'fora' : '', ds === 0 || ds === 6 ? 'fds' : ''].join(' ');
     return `<button class="${cls}" data-dia="${dia}" role="gridcell" aria-selected="${dia === Agenda.dia}" aria-label="${nomeDia(dia, { day: 'numeric', month: 'long' })}${n ? `, ${n} compromisso(s)` : ''}">
-      <span class="dia-n">${Number(dia.slice(8))}</span><span class="pontos">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
+      ${Agenda.aberto ? '' : `<span class="dia-l">${LETRAS[ds]}</span>`}<span class="dia-n">${Number(dia.slice(8))}</span><span class="pontos">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
   }).join('');
 }
 
@@ -342,11 +353,18 @@ document.addEventListener('click', async (e) => {
   }
 });
 function mudarMes(n) {
-  Agenda.mes = mesSeguinte(Agenda.mes, n); Agenda.mexeu = Date.now();
+  Agenda.mexeu = Date.now();
+  if (!Agenda.aberto) { Agenda.dia = somaDias(Agenda.dia, 7 * n); Agenda.mes = Agenda.dia.slice(0, 7); carregarSemana(); return; }
+  Agenda.mes = mesSeguinte(Agenda.mes, n);
   const hoje = diaISO(new Date());
   Agenda.dia = hoje.slice(0, 7) === Agenda.mes ? hoje : `${Agenda.mes}-01`;
   carregarSemana();
 }
+$('#cal-expandir').addEventListener('click', () => {
+  Agenda.aberto = !Agenda.aberto; Agenda.mes = Agenda.dia.slice(0, 7);
+  guardado.gravar('cerebro-cal', Agenda.aberto ? 'mes' : null);
+  carregarSemana();
+});
 $('#sem-ant').addEventListener('click', () => mudarMes(-1));
 $('#sem-prox').addEventListener('click', () => mudarMes(1));
 $('#cal-hoje').addEventListener('click', () => { const h = diaISO(new Date()); Agenda.dia = h; Agenda.mes = h.slice(0, 7); Agenda.mexeu = 0; carregarSemana(); });
@@ -1635,7 +1653,8 @@ const VozO = { mr: null, stream: null, pedacos: [], timer: null, enviando: false
 function marcarVoz(estado) {
   document.querySelectorAll('[data-voz-oraculo]').forEach((b) => { b.classList.toggle('ouvindo', estado === 'ouvindo'); b.classList.toggle('enviando', estado === 'enviando'); });
   const campo = $('#oraculo-hoje-alvo');
-  campo.placeholder = estado === 'ouvindo' ? 'Ouvindo… fale agora' : estado === 'enviando' ? 'Entendendo…' : 'Nome ou CNPJ da empresa';
+  campo.placeholder = estado === 'ouvindo' ? 'Ouvindo… fale agora' : estado === 'enviando' ? 'Entendendo…' : DICAS_ORACULO[0];
+  VozO.ocupado = !!estado;
 }
 async function vozOraculo() {
   if (VozO.enviando) return;
@@ -1667,17 +1686,26 @@ async function vozOraculo() {
 }
 document.addEventListener('click', (e) => { if (e.target.closest('[data-voz-oraculo]')) { e.preventDefault(); vozOraculo(); } });
 
+// Dica que vai mudando no campo do Oráculo (só quando está vazio e sem foco).
+const DICAS_ORACULO = ['Oráculo: pesquise uma empresa', 'Nome, CNPJ, site ou @', 'Ex.: Padaria 3 Poderes, BH', 'Ou toque no microfone e fale'];
+let dicaO = 0;
+setInterval(() => {
+  const c = $('#oraculo-hoje-alvo');
+  if (!c || c.value || document.activeElement === c || VozO.ocupado || document.hidden) return;
+  dicaO = (dicaO + 1) % DICAS_ORACULO.length; c.placeholder = DICAS_ORACULO[dicaO];
+}, 3500);
+
 // Cartão do Oráculo na tela Hoje: pesquisa direto daqui e abre a tela da pesquisa.
 $('#oraculo-hoje').addEventListener('submit', async (e) => {
   e.preventDefault();
   const alvo = $('#oraculo-hoje-alvo').value.trim();
   if (!alvo) { ir('oraculo'); return; }
-  const bt = $('#oraculo-hoje-btn'); bt.disabled = true; bt.textContent = '…';
+  const bt = $('#oraculo-hoje-btn'); bt.disabled = true;
   try {
     const { id } = await api('/dossies', { metodo: 'POST', corpo: { alvo } });
     $('#oraculo-hoje-alvo').value = '';
     ir(`dossie/${id}`);
-  } catch (err) { aviso(err.message); } finally { bt.disabled = false; bt.textContent = 'Pesquisar'; }
+  } catch (err) { aviso(err.message); } finally { bt.disabled = false; }
 });
 
 $('#form-oraculo').addEventListener('submit', async (e) => {
