@@ -4,6 +4,7 @@ const API = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/app';
 const GRAVADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/gravador';
 const ORACULO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/oraculo';
 const EQUIPE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/equipe';
+const EXTRA = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/extra';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -19,6 +20,25 @@ const guardado = {
 };
 let chave = guardado.ler(CHAVE);
 
+// ---- Tema: automático (segue o iPhone) → claro → escuro ----
+const TEMAS = ['auto', 'claro', 'escuro'];
+function aplicarTema(t) {
+  const r = document.documentElement;
+  if (t === 'auto') { delete r.dataset.theme; delete r.dataset.tema; } else { r.dataset.theme = t === 'claro' ? 'light' : 'dark'; r.dataset.tema = t; }
+  const escuro = t === 'escuro' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', escuro ? '#0E1116' : '#F4F5F7'));
+  const b = document.getElementById('b-tema');
+  if (b) b.setAttribute('aria-label', `Tema: ${{ auto: 'automático', claro: 'claro', escuro: 'escuro' }[t]}`);
+}
+aplicarTema(TEMAS.includes(guardado.ler('cerebro-tema')) ? guardado.ler('cerebro-tema') : 'auto');
+document.getElementById('b-tema')?.addEventListener('click', () => {
+  const atual = TEMAS.includes(guardado.ler('cerebro-tema')) ? guardado.ler('cerebro-tema') : 'auto';
+  const novo = TEMAS[(TEMAS.indexOf(atual) + 1) % TEMAS.length];
+  guardado.gravar('cerebro-tema', novo === 'auto' ? null : novo);
+  aplicarTema(novo);
+  aviso({ auto: 'Tema automático (segue o iPhone)', claro: 'Tema claro', escuro: 'Tema escuro' }[novo]);
+});
+
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
@@ -32,7 +52,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -62,9 +82,9 @@ const nomeDe = (c) => c?.name || (c?.wa_id ? '+' + c.wa_id : 'Contato');
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie',
+  whats: '#v-whats', contato: '#v-contato', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar',
 };
-const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje' };
+const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje' };
 
 function ir(destino) { location.hash = destino; }
 
@@ -89,6 +109,7 @@ async function rota() {
     if (vista === 'gravacao') await carregarGravacao(arg);
     if (vista === 'oraculo') await carregarOraculo();
     if (vista === 'dossie') await carregarDossie(arg);
+    if (vista === 'radar') await carregarRadar();
   } catch (e) { aviso(e.message); }
 }
 
@@ -106,22 +127,74 @@ function saudacao() {
   return `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}, ${nome}`;
 }
 
-// A âncora: uma coisa só, a mais importante agora.
-function escolherAncora(d) {
-  const urgente = d.avisos.find((a) => a.kind === 'urgente' && !a.read_at);
-  if (urgente) return { texto: `${urgente.title.replace(/^🚨\s*/, '')}: ${urgente.body}`, acao: 'Ver conversa', ir: urgente.data?.contact ? `contato/${urgente.data.contact}` : 'mais' };
-  if (d.perguntas.length) return { texto: d.perguntas[0].question, acao: 'Responder', ir: 'conversa' };
-  const agenda = Array.isArray(d.agenda) ? d.agenda : [];
-  const proximo = agenda.find((e) => new Date(e.inicio) - Date.now() < 2 * 3600e3 && new Date(e.inicio) > Date.now() - 15 * 60e3);
-  if (proximo) return { texto: `${proximo.titulo} às ${hora(proximo.inicio)}${proximo.local ? `, em ${proximo.local}` : ''}.`, ...(eEndereco(proximo.local) ? { acao: 'Ir com Waze', url: linkWaze(proximo.local) } : {}) };
-  if (d.aguardando.length) {
-    const c = d.aguardando[0];
-    return { texto: `${nomeDe(c)} espera sua resposta${c.last_summary ? `: ${c.last_summary}` : '.'}`, acao: 'Responder', ir: `contato/${c.wa_id}` };
+// "Agora": tudo o que pede você, do mais urgente ao menos — em rolagem lateral ou em blocos.
+function listaAgora(d) {
+  const itens = [];
+  for (const u of d.avisos.filter((a) => a.kind === 'urgente' && !a.read_at).slice(0, 5)) {
+    itens.push({ tipo: 'urgente', rotulo: 'Urgente', texto: `${u.title.replace(/^🚨\s*/, '')}: ${u.body}`, acao: 'Ver conversa', ir: u.data?.contact ? `contato/${u.data.contact}` : 'mais' });
   }
-  const lembrete = d.lembretes.find((l) => new Date(l.due_at) - Date.now() < 3 * 3600e3);
-  if (lembrete) return { texto: `${lembrete.text} às ${hora(lembrete.due_at)}.` };
-  return { texto: 'Nada pedindo você agora. Se quiser, me conta como está o dia.', acao: 'Conversar', ir: 'conversa' };
+  for (const p of d.perguntas) itens.push({ tipo: 'pergunta', rotulo: 'Dúvida do Dimy', texto: p.question, acao: 'Responder', ir: 'conversa' });
+  const agenda = Array.isArray(d.agenda) ? d.agenda : [];
+  for (const e of agenda.filter((x) => new Date(x.inicio) - Date.now() < 3 * 3600e3 && new Date(x.inicio) > Date.now() - 15 * 60e3).slice(0, 3)) {
+    itens.push({ tipo: 'agenda', rotulo: `Agenda · ${hora(e.inicio)}`, texto: `${e.titulo}${e.local ? `, em ${e.local}` : ''}.`, ...(eEndereco(e.local) ? { acao: 'Ir com Waze', url: linkWaze(e.local) } : {}) });
+  }
+  for (const c of d.aguardando.slice(0, 8)) {
+    itens.push({ tipo: 'whats', rotulo: 'Espera resposta', texto: `${nomeDe(c)}${c.last_summary ? `: ${c.last_summary}` : ' mandou mensagem.'}`, acao: 'Responder', ir: `contato/${c.wa_id}` });
+  }
+  for (const l of d.lembretes.filter((x) => new Date(x.due_at) - Date.now() < 6 * 3600e3).slice(0, 3)) {
+    itens.push({ tipo: 'lembrete', rotulo: `Lembrete · ${hora(l.due_at)}`, texto: l.text });
+  }
+  for (const a of d.avisos.filter((x) => !x.read_at && x.kind !== 'urgente' && Date.now() - Date.parse(x.created_at) < 24 * 3600e3).slice(0, 4)) {
+    itens.push({ tipo: 'aviso', rotulo: a.title.replace(/^\p{Extended_Pictographic}\s*/u, ''), texto: a.body, acao: a.data?.url && a.data.url.startsWith('./#') ? 'Abrir' : 'Ver', ir: a.data?.url?.startsWith('./#') ? a.data.url.slice(3) : 'mais' });
+  }
+  if (!itens.length) itens.push({ tipo: 'calmo', rotulo: 'Agora', texto: 'Nada pedindo você agora. Se quiser, me conta como está o dia.', acao: 'Conversar', ir: 'conversa' });
+  return itens;
 }
+const ModoAgora = { blocos: guardadoCedo('cerebro-agora') === 'blocos', itens: [] };
+function guardadoCedo(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function desenharAgora(itens) {
+  ModoAgora.itens = itens;
+  const sec = $('#ancora'), lista = $('#agora-lista');
+  sec.hidden = false;
+  sec.classList.toggle('blocos', ModoAgora.blocos);
+  lista.className = `agora-lista ${ModoAgora.blocos ? 'blocos' : 'rolar'}`;
+  const reais = itens.filter((i) => i.tipo !== 'calmo').length;
+  $('#agora-qtd').textContent = reais > 1 ? String(reais) : '';
+  $('#agora-modo').hidden = itens.length < 2;
+  $('#agora-modo-t').textContent = ModoAgora.blocos ? 'Rolar' : 'Blocos';
+  $('#agora-modo').setAttribute('aria-label', ModoAgora.blocos ? 'Mostrar em rolagem' : 'Mostrar em blocos');
+  lista.innerHTML = itens.map((a, k) => `<article class="ancora t-${a.tipo}">
+      <span class="ancora-ic"><svg viewBox="0 0 24 24">${ICONE_AGORA[a.tipo] || ICONE_AGORA.calmo}</svg></span>
+      <div class="ancora-corpo"><p class="ancora-rotulo">${esc(a.rotulo)}</p><p class="ancora-texto">${esc(a.texto)}</p></div>
+      ${a.acao ? `<button class="ancora-btn" data-agora="${k}">${esc(a.acao)}</button>` : ''}</article>`).join('');
+  $('#agora-pontos').innerHTML = itens.length > 1 && !ModoAgora.blocos ? itens.map((_, k) => `<i class="${k === 0 ? 'on' : ''}"></i>`).join('') : '';
+  lista.scrollLeft = 0;
+}
+const ICONE_AGORA = {
+  urgente: '<path d="M12 3 2 20h20L12 3Zm0 6v5m0 3v.5"/>',
+  pergunta: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.5"/>',
+  agenda: '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  whats: '<path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/>',
+  lembrete: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/>',
+  aviso: '<path d="M4 5h16v11H8l-4 4V5Z"/>',
+  calmo: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+};
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-agora]');
+  if (b) { const a = ModoAgora.itens[Number(b.dataset.agora)]; if (a?.url) location.href = a.url; else if (a?.ir) ir(a.ir); return; }
+  if (e.target.closest('#agora-modo')) {
+    ModoAgora.blocos = !ModoAgora.blocos;
+    try { localStorage.setItem('cerebro-agora', ModoAgora.blocos ? 'blocos' : 'rolar'); } catch { /* sem armazenamento */ }
+    desenharAgora(ModoAgora.itens);
+  }
+});
+document.addEventListener('scroll', (e) => {
+  const l = e.target;
+  if (!(l instanceof Element) || l.id !== 'agora-lista' || ModoAgora.blocos) return;
+  const w = l.firstElementChild?.getBoundingClientRect().width || 1;
+  const k = Math.round(l.scrollLeft / (w + 10));
+  document.querySelectorAll('#agora-pontos i').forEach((p, i) => p.classList.toggle('on', i === k));
+}, true);
 
 // ---- Datas no fuso de São Paulo ----
 const TZ = 'America/Sao_Paulo';
@@ -146,23 +219,29 @@ function blocoRota(l) {
   </div>`;
 }
 
-const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true };
+const Agenda = { dia: diaISO(new Date()), inicioSemana: null, eventos: [], google: true, mes: diaISO(new Date()).slice(0, 7), mexeu: 0 };
 function inicioDaSemana(dia) { return somaDias(dia, -((diaSemana(dia) + 6) % 7)); } // segunda-feira
+// Grade do mês: começa na segunda-feira da semana do dia 1 e vai até o domingo da última semana.
+function gradeDoMes(mes) {
+  const ini = inicioDaSemana(`${mes}-01`);
+  const [a, m] = mes.split('-').map(Number);
+  const ultimo = diaISO(new Date(Date.UTC(a, m, 0, 15)));
+  const fim = somaDias(inicioDaSemana(ultimo), 6);
+  const dias = Math.round((Date.parse(`${fim}T12:00:00Z`) - Date.parse(`${ini}T12:00:00Z`)) / 864e5) + 1;
+  return { ini, dias };
+}
+const mesSeguinte = (mes, n) => { const [a, m] = mes.split('-').map(Number); const d = new Date(Date.UTC(a, m - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
 async function carregarHoje() {
   $('#hoje-saudacao').textContent = saudacao();
   const hoje = diaISO(new Date());
   $('#hoje-data').textContent = nomeDia(hoje, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  // Voltou ao app depois de um tempo: o calendário volta para hoje.
+  if (Date.now() - Agenda.mexeu > 10 * 60e3) { Agenda.dia = hoje; Agenda.mes = hoje.slice(0, 7); }
   Agenda.inicioSemana = null; // sempre busca a agenda de novo (o Dimy pode ter marcado algo enquanto o app estava aberto)
   const [d] = await Promise.all([api('/hoje'), carregarSemana()]);
   atualizarBadges(d);
-
-  const a = escolherAncora(d);
-  $('#ancora').hidden = false;
-  $('#ancora-texto').textContent = a.texto;
-  const bt = $('#ancora-acao');
-  bt.hidden = !a.acao; bt.textContent = a.acao || '';
-  bt.onclick = () => { if (a.url) location.href = a.url; else if (a.ir) ir(a.ir); };
+  desenharAgora(listaAgora(d));
 
   // Lembretes: cartões com sino e horário (toque para mudar data e hora)
   const lem = d.lembretes || [];
@@ -189,11 +268,11 @@ function quandoCurto(iso) {
 }
 
 async function carregarSemana() {
-  const ini = inicioDaSemana(Agenda.dia);
+  const { ini, dias } = gradeDoMes(Agenda.mes);
   if (ini !== Agenda.inicioSemana) {
     Agenda.inicioSemana = ini;
     try {
-      const r = await api(`/agenda?de=${ini}&dias=7`);
+      const r = await api(`/agenda?de=${ini}&dias=${dias}`);
       Agenda.google = r.google; Agenda.eventos = Array.isArray(r.eventos) ? r.eventos : [];
     } catch (e) { Agenda.eventos = []; aviso(`Agenda: ${e.message}`); }
   }
@@ -201,15 +280,16 @@ async function carregarSemana() {
 }
 
 function desenharSemana() {
-  const ini = Agenda.inicioSemana, hoje = diaISO(new Date());
-  const meio = somaDias(ini, 3);
-  $('#sem-mes').textContent = nomeDia(meio, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
-  const letras = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
-  $('#semana').innerHTML = Array.from({ length: 7 }, (_, k) => {
-    const dia = somaDias(ini, k);
-    const n = Agenda.eventos.filter((e) => diaISO(e.inicio) === dia).length;
-    return `<button class="dia ${dia === Agenda.dia ? 'sel' : ''} ${dia === hoje ? 'hoje' : ''}" data-dia="${dia}" role="tab" aria-selected="${dia === Agenda.dia}">
-      <span class="dia-l">${letras[k]}</span><span class="dia-n">${Number(dia.slice(8))}</span><span class="pontos">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
+  const { ini, dias } = gradeDoMes(Agenda.mes), hoje = diaISO(new Date());
+  $('#sem-mes').textContent = nomeDia(`${Agenda.mes}-15`, { month: 'long', year: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
+  $('#cal-hoje').hidden = Agenda.dia === hoje && Agenda.mes === hoje.slice(0, 7);
+  const porDia = {};
+  for (const e of Agenda.eventos) { const k = diaISO(e.inicio); porDia[k] = (porDia[k] || 0) + 1; }
+  $('#semana').innerHTML = Array.from({ length: dias }, (_, k) => {
+    const dia = somaDias(ini, k), n = porDia[dia] || 0, ds = diaSemana(dia);
+    const cls = ['dia', dia === Agenda.dia ? 'sel' : '', dia === hoje ? 'hoje' : '', dia.slice(0, 7) !== Agenda.mes ? 'fora' : '', ds === 0 || ds === 6 ? 'fds' : ''].join(' ');
+    return `<button class="${cls}" data-dia="${dia}" role="gridcell" aria-selected="${dia === Agenda.dia}" aria-label="${nomeDia(dia, { day: 'numeric', month: 'long' })}${n ? `, ${n} compromisso(s)` : ''}">
+      <span class="dia-n">${Number(dia.slice(8))}</span><span class="pontos">${'<i></i>'.repeat(Math.min(n, 3))}</span></button>`;
   }).join('');
 }
 
@@ -245,7 +325,11 @@ function desenharLinhaTempo() {
 
 document.addEventListener('click', async (e) => {
   const d = e.target.closest('.dia[data-dia]');
-  if (d) { Agenda.dia = d.dataset.dia; desenharSemana(); desenharLinhaTempo(); return; }
+  if (d) {
+    Agenda.dia = d.dataset.dia; Agenda.mexeu = Date.now();
+    if (Agenda.dia.slice(0, 7) !== Agenda.mes) { Agenda.mes = Agenda.dia.slice(0, 7); carregarSemana(); } else { desenharSemana(); desenharLinhaTempo(); }
+    return;
+  }
   const ev = e.target.closest('[data-evento]');
   if (ev) { const x = Agenda.eventos.find((i) => i.id === ev.dataset.evento); if (x) editarEvento(x); return; }
   const lb = e.target.closest('[data-lembrete]');
@@ -257,8 +341,26 @@ document.addEventListener('click', async (e) => {
     if (ac.dataset.acao === 'dimy') { ir('conversa'); setTimeout(() => !Dimy.ligado && ligarDimy(), 300); }
   }
 });
-$('#sem-ant').addEventListener('click', () => { Agenda.dia = somaDias(Agenda.inicioSemana, -7); carregarSemana(); });
-$('#sem-prox').addEventListener('click', () => { Agenda.dia = somaDias(Agenda.inicioSemana, 7); carregarSemana(); });
+function mudarMes(n) {
+  Agenda.mes = mesSeguinte(Agenda.mes, n); Agenda.mexeu = Date.now();
+  const hoje = diaISO(new Date());
+  Agenda.dia = hoje.slice(0, 7) === Agenda.mes ? hoje : `${Agenda.mes}-01`;
+  carregarSemana();
+}
+$('#sem-ant').addEventListener('click', () => mudarMes(-1));
+$('#sem-prox').addEventListener('click', () => mudarMes(1));
+$('#cal-hoje').addEventListener('click', () => { const h = diaISO(new Date()); Agenda.dia = h; Agenda.mes = h.slice(0, 7); Agenda.mexeu = 0; carregarSemana(); });
+// Deslizar o calendário para o lado troca de mês.
+(() => {
+  let x0 = null, y0 = 0;
+  const el = $('#semana');
+  el.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  el.addEventListener('touchend', (e) => {
+    if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) mudarMes(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 // ---------------------------------------------------------------------------
 // Folha de edição: calendário (data) e relógio (hora) nativos do iPhone
@@ -279,7 +381,11 @@ function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar' }) {
         ${c.hora2 ? `<label class="campo ic-campo"><span>${IC_REL}Até</span><input type="time" name="${c.hora2}" value="${esc(c.vHora2)}"></label>` : ''}
       </div>`;
     }
-    return `<label class="campo"><span>${c.rotulo}</span><input name="${c.nome}" value="${esc(c.valor || '')}" placeholder="${esc(c.placeholder || '')}" ${c.obrigatorio ? 'required' : ''} autocomplete="off"></label>`;
+    if (c.tipo === 'escolha' || c.tipo === 'marcas') {
+      const radio = c.tipo === 'escolha';
+      return `<div class="campo"><span>${c.rotulo}</span><div class="escolha">${c.opcoes.map((o) => `<label><input type="${radio ? 'radio' : 'checkbox'}" name="${radio ? c.nome : o.nome}" value="${esc(o.valor ?? '1')}" ${o.marcado ? 'checked' : ''}><span>${esc(o.texto)}</span></label>`).join('')}</div></div>`;
+    }
+    return `<label class="campo"><span>${c.rotulo}</span><input name="${c.nome}" type="${c.tipoInput || 'text'}" value="${esc(c.valor || '')}" placeholder="${esc(c.placeholder || '')}" ${c.obrigatorio ? 'required' : ''} autocomplete="${c.autocomplete || 'off'}" ${c.tipoInput === 'email' ? 'autocapitalize="off" inputmode="email"' : ''}></label>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
   }).join('');
   $('#folha-erro').textContent = '';
   $('#folha-apagar').hidden = !apagar;
@@ -319,7 +425,7 @@ function editarEvento(ev, sug) {
       const corpo = { titulo: f.titulo.trim(), inicio: montarISO(f.dia, f.inicio), fim: fimISO, local: f.local?.trim() || '' };
       await api(ev ? `/agenda/${encodeURIComponent(ev.id)}` : '/agenda', { metodo: 'POST', corpo });
       aviso(ev ? 'Compromisso atualizado.' : 'Compromisso marcado. O alarme toca 20 min antes.');
-      Agenda.dia = f.dia; Agenda.inicioSemana = null; await carregarSemana();
+      Agenda.dia = f.dia; Agenda.mes = f.dia.slice(0, 7); Agenda.mexeu = Date.now(); Agenda.inicioSemana = null; await carregarSemana();
     },
     apagar: ev ? async () => { await api(`/agenda/${encodeURIComponent(ev.id)}/apagar`, { metodo: 'POST' }); aviso('Compromisso apagado.'); Agenda.inicioSemana = null; await carregarSemana(); } : null,
   });
@@ -457,7 +563,9 @@ async function carregarContatos() {
 let contatoAtual = null;
 async function carregarContato(wa) {
   contatoAtual = wa;
-  const { contato, mensagens } = await api(`/contatos/${encodeURIComponent(wa)}`);
+  const { contato, mensagens, perfil } = await api(`/contatos/${encodeURIComponent(wa)}`);
+  contatoInfo = contato;
+  desenharPerfil(perfil);
   $('#contato-nome').textContent = nomeDe(contato || { wa_id: wa });
   $('#contato-resumo').textContent = contato?.last_summary || '';
   $('#b-silenciar').textContent = contato?.muted ? 'Voltar a avisar' : 'Silenciar';
@@ -470,16 +578,47 @@ async function carregarContato(wa) {
   linkWhats();
 }
 
+let contatoInfo = null;
+const RELACAO = { cliente: 'Cliente', prospect: 'Prospect', parceiro: 'Parceiro', fornecedor: 'Fornecedor', equipe: 'Equipe', familia: 'Família', amigo: 'Amigo', servico: 'Serviço', outro: 'Contato' };
+function desenharPerfil(p) {
+  const el = $('#contato-perfil');
+  el.hidden = false;
+  if (!p) { $('#perfil-linha').textContent = 'Ainda aprendendo sobre este contato'; $('#perfil-corpo').innerHTML = '<p class="dica">Eu monto o perfil a partir das conversas (quem é, assuntos e o que ficou em aberto).</p><button class="btn claro" id="b-perfilar">Aprender agora</button>'; return; }
+  $('#perfil-linha').innerHTML = `<b>${esc(RELACAO[p.relacao] || 'Contato')}</b>${p.empresa ? ` · ${esc(p.empresa)}` : ''}${p.resumo ? ` · ${esc(p.resumo)}` : ''}`;
+  $('#perfil-corpo').innerHTML = `${p.resumo ? `<p>${esc(p.resumo)}</p>` : ''}
+    ${p.temas?.length ? `<p class="rot">Assuntos</p><div class="chips">${p.temas.map((t) => `<span class="chip-o">${esc(t)}</span>`).join('')}</div>` : ''}
+    ${p.pendencias?.length ? `<p class="rot">Em aberto</p><ul class="checks">${p.pendencias.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+    ${p.tom ? `<p class="rot">Como você fala com ele</p><p class="dica">${esc(p.tom)}</p>` : ''}
+    <p class="dica">Aprendido de ${p.msgs_analisadas} mensagens · ${quando(p.atualizado_em)}</p>`;
+}
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest('#b-perfilar')) return;
+  const b = e.target.closest('#b-perfilar'); b.disabled = true; b.textContent = 'Lendo as conversas…';
+  try { const { perfil } = await api(`/contatos/${contatoAtual}/perfil`, { metodo: 'POST' }); desenharPerfil(perfil); $('#contato-perfil').open = true; }
+  catch (err) { aviso(err.message); b.disabled = false; b.textContent = 'Aprender agora'; }
+});
+// Dentro das 24 h desde a última mensagem dele dá para enviar direto pelo app; fora disso, abre o WhatsApp.
+const podeEnviar = () => !!contatoInfo?.last_in_at && Date.now() - Date.parse(contatoInfo.last_in_at) < 24 * 3600e3;
 function linkWhats() {
   $('#b-abrir').href = `https://wa.me/${contatoAtual}?text=${encodeURIComponent($('#resposta').value)}`;
+  const tem = !!$('#resposta').value.trim();
+  $('#b-enviar-wa').hidden = !(tem && podeEnviar());
+  $('#b-abrir').hidden = tem && podeEnviar();
 }
+$('#b-enviar-wa').addEventListener('click', async (e) => {
+  const texto = $('#resposta').value.trim(); if (!texto) return;
+  const b = e.currentTarget; b.disabled = true; b.textContent = 'Enviando…';
+  try { const { ok } = await api(`/contatos/${contatoAtual}/responder`, { metodo: 'POST', corpo: { texto } }); aviso(ok || 'Enviado.'); await carregarContato(contatoAtual); }
+  catch (err) { aviso(err.message); }
+  finally { b.disabled = false; b.textContent = 'Enviar'; }
+});
 $('#resposta').addEventListener('input', linkWhats);
 
 $('#b-sugerir').addEventListener('click', async (e) => {
-  const b = e.currentTarget; b.disabled = true; b.textContent = 'Pensando…';
+  const b = e.currentTarget; b.disabled = true; b.textContent = 'Escrevendo…';
   try { const { sugestao } = await api(`/contatos/${contatoAtual}/sugerir`, { metodo: 'POST' }); $('#resposta').value = sugestao; linkWhats(); }
   catch (err) { aviso(err.message); }
-  finally { b.disabled = false; b.textContent = 'Sugerir resposta'; }
+  finally { b.disabled = false; b.textContent = 'Dimy, responda'; }
 });
 $('#b-abrir').addEventListener('click', () => {
   // Ao abrir o WhatsApp para responder, tira da lista de espera (o eco da mensagem confirma depois).
@@ -1602,7 +1741,9 @@ function mostrarOnde(local) {
 
 function mostrarPerto(r, segmento = '') {
   const lista = $('#lista-perto');
-  Geo.empresas = r.empresas || [];
+  Geo.empresas = r.empresas || []; Geo.segmento = segmento || r.segmento || '';
+  $('#perto-exportar').hidden = !Geo.empresas.length;
+  $('#perto-exportar').innerHTML = Geo.empresas.length ? blocoExportar('perto', `Exportar ou enviar as ${Geo.empresas.length} empresas`) : '';
   mostrarOnde(r.local);
   lista.innerHTML = Geo.empresas.length ? Geo.empresas.map((e, i) => `<li class="perto-item">
       <div class="pi-corpo"><b>${esc(e.nome)}</b>
@@ -1634,7 +1775,12 @@ async function buscarPerto() {
 }
 $('#form-perto').addEventListener('submit', (e) => { e.preventDefault(); buscarPerto(); });
 $('#perto-desligar').addEventListener('click', () => { guardado.gravar('cerebro-geo', null); pararGeo(); $('#perto-desligar').hidden = true; aviso('Localização desligada. Ligo de novo quando você buscar empresas por perto.'); });
-$('#oh-perto').addEventListener('click', () => { ir('oraculo'); setTimeout(() => { $('#form-perto').scrollIntoView({ behavior: 'smooth', block: 'start' }); buscarPerto(); }, 250); });
+$('#oh-perto').addEventListener('click', () => { $('#perto-seg').value = ''; ir('oraculo'); setTimeout(() => { $('#form-perto').scrollIntoView({ behavior: 'smooth', block: 'start' }); buscarPerto(); }, 250); });
+document.addEventListener('click', (e) => {
+  const s = e.target.closest('[data-perto-seg]'); if (!s) return;
+  $('#perto-seg').value = s.dataset.pertoSeg; ir('oraculo');
+  setTimeout(() => { $('#form-perto').scrollIntoView({ behavior: 'smooth', block: 'start' }); buscarPerto(); }, 250);
+});
 $('#lista-perto').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-perto-oraculo]'); if (!b) return;
   const em = Geo.empresas[Number(b.dataset.pertoOraculo)]; if (!em) return;
@@ -1698,6 +1844,7 @@ async function carregarDossie(id) {
     </article>
     <p class="resumo-texto">${esc(x.resumo || '')}</p>
     ${ficha.length ? `<div class="ficha">${ficha.map(([k, v]) => `<div class="ficha-item ${k === 'Atividade' ? 'largo' : ''}"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>` : '<p class="dica">CNPJ não identificado: dossiê feito só com o que é público na web.</p>'}
+    ${blocoExportar('dossie', 'Exportar ou enviar o dossiê')}
     ${blocoEnvio(d)}
     <nav class="segs" aria-label="Ir para">
       ${[['abordagem', 'Abordagem'], ['socios', 'Sócios'], ['empresa', 'Empresa'], ['riscos', 'Riscos'], ['fontes', 'Fontes']].map(([k, t]) => `<button class="seg dseg" data-dpane="${k}">${t}</button>`).join('')}
@@ -1860,6 +2007,223 @@ $('#v-dossie').addEventListener('click', async (e) => {
     }
   } catch (err) { aviso(err.message); }
 });
+
+// ---------------------------------------------------------------------------
+// Exportar: PDF e CSV do Oráculo (dossiê e empresas por perto), com envio direto por e-mail ou WhatsApp
+// ---------------------------------------------------------------------------
+const IC_PDF = '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M15 3v4h4M9 13h6M9 17h4"/></svg>';
+const IC_CSV = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>';
+const IC_MAIL = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+const Exp = {};
+function blocoExportar(alvo, titulo = 'Exportar e enviar') {
+  return `<div class="exportar"><p>${titulo}</p><div class="exp-botoes">
+    <button class="exp-btn pdf" data-exp="pdf" data-exp-alvo="${alvo}">${IC_PDF}PDF</button>
+    <button class="exp-btn csv" data-exp="csv" data-exp-alvo="${alvo}">${IC_CSV}CSV</button>
+    <button class="exp-btn email" data-exp="email" data-exp-alvo="${alvo}">${IC_MAIL}E-mail</button>
+    <button class="exp-btn wa" data-exp="whatsapp" data-exp-alvo="${alvo}">${IC_WHATS}WhatsApp</button></div></div>`;
+}
+// Texto seguro para as fontes padrão do PDF (sem emoji).
+const pdfTxt = (s) => String(s ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/•/g, '-').replace(/…/g, '...').replace(/[^\x00-\xFF]/g, '').replace(/\*/g, '').trim();
+const csvCel = (v) => { const t = String(v ?? '').replace(/\r?\n/g, ' ').trim(); return /[";]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+const csvBlob = (linhas) => new Blob(['﻿' + linhas.map((l) => l.map(csvCel).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+const nomeArq = (s) => String(s || 'oraculo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 50) || 'oraculo';
+let libPdf = null;
+async function carregarPdf() {
+  if (!libPdf) {
+    const [{ jsPDF }, at] = await Promise.all([import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm'), import('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm')]);
+    libPdf = { jsPDF, autoTable: at.default || at.autoTable };
+  }
+  return libPdf;
+}
+// Documento simples: título, subtítulo, seções com parágrafos, listas e tabelas; quebra de página automática.
+async function novoPdf(titulo, sub) {
+  const { jsPDF, autoTable } = await carregarPdf();
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const M = 44, L = doc.internal.pageSize.getWidth() - 2 * M, H = doc.internal.pageSize.getHeight();
+  let y = M;
+  const cabe = (h) => { if (y + h > H - M) { doc.addPage(); y = M; } };
+  doc.setFillColor(109, 40, 217); doc.rect(0, 0, doc.internal.pageSize.getWidth(), 6, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(18, 22, 28);
+  for (const l of doc.splitTextToSize(pdfTxt(titulo), L)) { cabe(22); doc.text(l, M, y + 14); y += 22; }
+  if (sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text(doc.splitTextToSize(pdfTxt(sub), L), M, y + 6); y += 18 * Math.ceil(pdfTxt(sub).length / 95) + 4; }
+  const api_ = {
+    secao(t) { y += 10; cabe(30); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(109, 40, 217); doc.text(pdfTxt(t), M, y + 10); y += 20; doc.setTextColor(18, 22, 28); },
+    p(t, { negrito = false, tam = 10.5 } = {}) {
+      const txt = pdfTxt(t); if (!txt) return;
+      doc.setFont('helvetica', negrito ? 'bold' : 'normal'); doc.setFontSize(tam); doc.setTextColor(18, 22, 28);
+      for (const l of doc.splitTextToSize(txt, L)) { cabe(15); doc.text(l, M, y + 10); y += 14; }
+      y += 4;
+    },
+    campo(k, v) { if (v == null || v === '') return; api_.p(`${k}: ${v}`); },
+    lista(arr) { for (const t of (arr || []).filter(Boolean)) { const ls = doc.splitTextToSize(pdfTxt(t), L - 14); doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); ls.forEach((l, k) => { cabe(15); if (!k) doc.text('-', M, y + 10); doc.text(l, M + 12, y + 10); y += 14; }); y += 2; } },
+    tabela(cab, linhas) {
+      autoTable(doc, { startY: y + 4, head: [cab.map(pdfTxt)], body: linhas.map((l) => l.map(pdfTxt)), margin: { left: M, right: M }, styles: { fontSize: 8.5, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [109, 40, 217] }, alternateRowStyles: { fillColor: [245, 243, 255] } });
+      y = doc.lastAutoTable.finalY + 10;
+    },
+    blob() {
+      const n = doc.getNumberOfPages();
+      for (let k = 1; k <= n; k++) { doc.setPage(k); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(156, 163, 175); doc.text(`Segundo Cérebro · Oráculo · ${new Date().toLocaleDateString('pt-BR')} · ${k}/${n}`, M, H - 20); }
+      return doc.output('blob');
+    },
+  };
+  return api_;
+}
+
+// Dossiê → PDF / CSV / texto
+async function pdfDossie(d) {
+  const x = d.dossie || {}, c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null, f = x.financeiro || {}, ab = x.abordagem || {}, e = x.empresa || {}, m = x.mercado || {};
+  const pdf = await novoPdf(`Oráculo · ${d.nome || d.alvo}`, [d.cnpj ? `CNPJ ${fmtCnpj(d.cnpj)}` : '', c?.municipio ? `${c.municipio}/${c.uf}` : '', `Gerado em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join(' · '));
+  pdf.secao(`${(RISCO[d.risco] || RISCO.indefinido).t}`); pdf.p(f.resumo);
+  pdf.secao('Resumo'); pdf.p(x.resumo);
+  if (c) { pdf.secao('Cadastro (Receita Federal)'); pdf.tabela(['Campo', 'Valor'], [['Situação', c.situacao], ['Abertura', fmtData(c.abertura)], ['Porte', c.porte], ['Simples', c.simples == null ? '-' : c.simples ? (c.mei ? 'MEI' : 'Sim') : 'Não'], ['Capital social', fmtReais(c.capital_social)], ['Atividade', c.cnae_fiscal_descricao], ['Telefone', c.telefone], ['Endereço', [c.logradouro, c.numero, c.bairro, c.municipio && `${c.municipio}/${c.uf}`].filter(Boolean).join(', ')]].filter(([, v]) => v)); }
+  pdf.secao('Abordagem'); pdf.p(ab.tese); pdf.campo('Oferta', ab.oferta_sugerida); pdf.campo('Gancho', ab.gancho); pdf.campo('Canal e quem', ab.canal); pdf.campo('Momento', ab.momento);
+  if (ab.mensagem_whatsapp) { pdf.p('Primeira mensagem:', { negrito: true }); pdf.p(ab.mensagem_whatsapp); }
+  if (ab.roteiro?.length) { pdf.p('Roteiro', { negrito: true }); pdf.lista(ab.roteiro); }
+  if (ab.perguntas?.length) { pdf.p('Perguntas para descobrir', { negrito: true }); pdf.lista(ab.perguntas); }
+  if (ab.objecoes?.length) { pdf.p('Objeções prováveis', { negrito: true }); pdf.lista(ab.objecoes.map((o) => `${o.objecao} -> ${o.resposta}`)); }
+  if (x.socios?.length) { pdf.secao('Sócios e responsáveis'); pdf.p(x.quem_decide); for (const s of x.socios) { pdf.p(`${s.nome}${s.cargo ? ` (${s.cargo})` : ''}`, { negrito: true }); pdf.p(s.perfil); pdf.campo('Como abordar', s.como_abordar); } }
+  pdf.secao('Empresa e mercado'); pdf.campo('O que faz', e.o_que_faz); pdf.campo('Público', e.publico); pdf.campo('Porte estimado', e.porte_estimado); pdf.campo('Faturamento estimado', e.faturamento_estimado); pdf.campo('Como recebe hoje', e.como_recebe_hoje); pdf.campo('Presença digital', e.presenca_digital);
+  pdf.campo('Posicionamento', m.posicionamento); if (m.concorrentes?.length) pdf.campo('Concorrentes', m.concorrentes.join(', '));
+  if (x.dores_segmento?.length) { pdf.p('Dores do segmento', { negrito: true }); pdf.lista(x.dores_segmento.map((g) => `${g.dor}${g.impacto ? ` - ${g.impacto}` : ''}`)); }
+  pdf.secao('Riscos e sinais financeiros'); if (f.sinais?.length) pdf.lista(f.sinais.map((g) => `${TIPO_SINAL[g.tipo] || g.tipo}: ${g.descricao}${g.fonte ? ` (${g.fonte})` : ''}`)); else pdf.p('Nenhum sinal encontrado em fontes públicas.');
+  if (x.proximos_passos?.length) { pdf.secao('Próximos passos'); pdf.lista(x.proximos_passos); }
+  if (d.fontes?.length) { pdf.secao('Fontes'); pdf.lista(d.fontes); }
+  return pdf.blob();
+}
+function csvDossie(d) {
+  const x = d.dossie || {}, c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null, f = x.financeiro || {}, ab = x.abordagem || {}, e = x.empresa || {}, m = x.mercado || {};
+  const L = [['Seção', 'Campo', 'Valor'], ['Empresa', 'Nome', d.nome || d.alvo], ['Empresa', 'CNPJ', d.cnpj ? fmtCnpj(d.cnpj) : ''], ['Empresa', 'Cidade', c?.municipio ? `${c.municipio}/${c.uf}` : ''],
+    ['Empresa', 'Situação', c?.situacao], ['Empresa', 'Abertura', c ? fmtData(c.abertura) : ''], ['Empresa', 'Porte', c?.porte], ['Empresa', 'Simples', c?.simples == null ? '' : c.simples ? 'Sim' : 'Não'], ['Empresa', 'Capital social', c ? fmtReais(c.capital_social) : ''], ['Empresa', 'Atividade', c?.cnae_fiscal_descricao], ['Empresa', 'Telefone', c?.telefone],
+    ['Resumo', 'Resumo', x.resumo], ['Risco', 'Nível', (RISCO[d.risco] || RISCO.indefinido).t], ['Risco', 'Resumo', f.resumo],
+    ...(f.sinais || []).map((g) => ['Risco', TIPO_SINAL[g.tipo] || g.tipo, `${g.descricao}${g.fonte ? ` (${g.fonte})` : ''}`]),
+    ['Abordagem', 'Tese', ab.tese], ['Abordagem', 'Oferta', ab.oferta_sugerida], ['Abordagem', 'Gancho', ab.gancho], ['Abordagem', 'Canal', ab.canal], ['Abordagem', 'Momento', ab.momento], ['Abordagem', 'Mensagem WhatsApp', ab.mensagem_whatsapp],
+    ...(ab.objecoes || []).map((o) => ['Objeção', o.objecao, o.resposta]),
+    ...(x.socios || []).map((s) => ['Sócio', s.nome, [s.cargo, s.perfil, s.como_abordar && `Como abordar: ${s.como_abordar}`].filter(Boolean).join(' | ')]),
+    ['Mercado', 'O que faz', e.o_que_faz], ['Mercado', 'Faturamento estimado', e.faturamento_estimado], ['Mercado', 'Como recebe hoje', e.como_recebe_hoje], ['Mercado', 'Posicionamento', m.posicionamento], ['Mercado', 'Concorrentes', (m.concorrentes || []).join(', ')],
+    ...(x.dores_segmento || []).map((g) => ['Dor do segmento', g.dor, g.impacto]),
+    ...(x.proximos_passos || []).map((t, k) => ['Próximo passo', String(k + 1), t]),
+    ...(d.fontes || []).map((u, k) => ['Fonte', String(k + 1), u])];
+  return csvBlob(L.filter((l) => l[2]));
+}
+// Empresas por perto → PDF / CSV
+const linhaPerto = (e) => [e.nome, e.categoria || '', e.distancia_m != null ? fmtDist(e.distancia_m) : '', e.endereco || '', e.telefone || '', e.site || '', e.motivo || ''];
+async function pdfPerto() {
+  const onde = Geo.ultimo?.local;
+  const pdf = await novoPdf(`Empresas perto de ${onde?.bairro || onde?.cidade || 'você'}${Geo.segmento ? ` · ${Geo.segmento}` : ''}`, [onde?.endereco, `${Geo.empresas.length} empresas`, `Gerado em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join(' · '));
+  pdf.tabela(['Empresa', 'Segmento', 'Dist.', 'Endereço', 'Telefone', 'Site', 'Por que abordar'], Geo.empresas.map(linhaPerto));
+  return pdf.blob();
+}
+const csvPerto = () => csvBlob([['Empresa', 'Segmento', 'Distância', 'Endereço', 'Telefone', 'Site', 'Por que abordar', 'Latitude', 'Longitude'], ...Geo.empresas.map((e) => [...linhaPerto(e), e.lat ?? '', e.lng ?? ''])]);
+
+function dadosExport(alvo) {
+  if (alvo === 'dossie') {
+    const d = Oraculo.atual, base = `oraculo-${nomeArq(d.nome || d.alvo)}`;
+    return { base, assunto: `Oráculo · ${d.nome || d.alvo}`, texto: `Segue o dossiê do Oráculo sobre ${d.nome || d.alvo}.${d.dossie?.resumo ? `\n\n${d.dossie.resumo}` : ''}`, pdf: () => pdfDossie(d), csv: () => csvDossie(d) };
+  }
+  const onde = Geo.ultimo?.local, base = `empresas-perto-${nomeArq(onde?.bairro || onde?.cidade || 'aqui')}${Geo.segmento ? `-${nomeArq(Geo.segmento)}` : ''}`;
+  return { base, assunto: `Empresas perto de ${onde?.bairro || onde?.cidade || 'mim'}${Geo.segmento ? ` (${Geo.segmento})` : ''}`, texto: `Segue a lista de ${Geo.empresas.length} empresas${Geo.segmento ? ` de ${Geo.segmento}` : ''} perto de ${onde?.endereco || 'mim'}.`, pdf: pdfPerto, csv: async () => csvPerto() };
+}
+async function entregarArquivo(blob, nome) {
+  const f = new File([blob], nome, { type: blob.type });
+  if (navigator.canShare?.({ files: [f] })) {
+    try { await navigator.share({ files: [f], title: nome }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  const u = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = u; a.download = nome; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(u), 60000);
+}
+const paraBase64 = (blob) => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = erro; r.readAsDataURL(blob); });
+
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-exp]'); if (!b) return;
+  const alvo = b.dataset.expAlvo, x = dadosExport(alvo), acao = b.dataset.exp;
+  if (alvo === 'perto' && !Geo.empresas.length) { aviso('Busque as empresas primeiro.'); return; }
+  if (acao === 'pdf' || acao === 'csv') {
+    const t = b.innerHTML; b.disabled = true; b.textContent = '…';
+    try { await entregarArquivo(await x[acao](), `${x.base}.${acao}`); } catch (err) { aviso(`Não consegui gerar o ${acao.toUpperCase()}: ${err.message}`); }
+    finally { b.disabled = false; b.innerHTML = t; }
+    return;
+  }
+  const email = acao === 'email';
+  abrirFolha({
+    titulo: email ? 'Enviar por e-mail' : 'Enviar no WhatsApp', botao: 'Enviar',
+    campos: [
+      email
+        ? { rotulo: 'E-mail de quem recebe', nome: 'para', tipoInput: 'email', valor: guardado.ler('cerebro-ultimo-email') || '', placeholder: 'nome@empresa.com.br', obrigatorio: true, dica: 'Sai do seu Gmail, com os arquivos em anexo.' }
+        : { rotulo: 'Contato ou número', nome: 'para', valor: '', placeholder: 'Ex.: Bruno ou 31 99999-0000', obrigatorio: true, dica: 'Sai do seu WhatsApp comercial. A Meta só deixa enviar para quem te escreveu nas últimas 24 h.' },
+      { tipo: 'marcas', rotulo: 'Arquivos', opcoes: [{ nome: 'pdf', texto: 'PDF', marcado: true }, { nome: 'csv', texto: 'CSV (planilha)', marcado: email }] },
+      { rotulo: 'Mensagem', nome: 'texto', valor: x.texto },
+    ],
+    salvar: async (f) => {
+      if (!f.pdf && !f.csv) throw new Error('Escolha pelo menos um arquivo.');
+      const arquivos = [];
+      if (f.pdf) arquivos.push({ nome: `${x.base}.pdf`, tipo: 'application/pdf', base64: await paraBase64(await x.pdf()) });
+      if (f.csv) arquivos.push({ nome: `${x.base}.csv`, tipo: 'text/csv', base64: await paraBase64(await x.csv()) });
+      const r = await api('/exportar', { metodo: 'POST', corpo: { canal: email ? 'email' : 'whatsapp', para: f.para, assunto: x.assunto, texto: f.texto, arquivos } });
+      if (email) guardado.gravar('cerebro-ultimo-email', f.para);
+      aviso(r.mensagem || 'Enviado.');
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Radar: o Dimy conectado à internet (notícias, mercado, aprendizado)
+// ---------------------------------------------------------------------------
+const Radar = { timer: null };
+function desenharMapa() {
+  const web = [['Notícias', 60, 34], ['Mercado', 300, 34], ['Concorrentes', 56, 118], ['Regulação', 304, 118]];
+  const voce = [['Memória', 70, 212], ['WhatsApp', 150, 232], ['Agenda', 230, 232], ['Oráculo', 300, 206]];
+  const cx = 180, cy = 120;
+  const no = (t, x, y, cls) => `<g class="${cls}"><line class="lig ${cls === 'n-web' ? 'web' : 'voce'}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"/><circle cx="${x}" cy="${y}" r="7" stroke-width="2"/><text x="${x}" y="${y - 12}" text-anchor="middle">${t}</text></g>`;
+  $('#radar-mapa').innerHTML = `<text class="legenda" x="180" y="14" text-anchor="middle">INTERNET</text><text class="legenda" x="180" y="248" text-anchor="middle">VOCÊ</text>
+    ${web.map(([t, x, y]) => no(t, x, y, 'n-web')).join('')}${voce.map(([t, x, y]) => no(t, x, y + 0, 'n-voce')).join('')}
+    <g class="n-dimy"><circle cx="${cx}" cy="${cy}" r="34"/><text x="${cx}" y="${cy + 5}" text-anchor="middle">Dimy</text></g>`;
+}
+async function carregarRadar() {
+  clearTimeout(Radar.timer);
+  desenharMapa();
+  const { edicao: e, temas, historico } = await api('/radar');
+  $('#radar-temas').innerHTML = temas.length ? temas.map((t) => `<button data-radar-tema="${esc(t.id)}" aria-label="Parar de seguir ${esc(t.tema)}">${esc(t.tema)}<span>×</span></button>`).join('') : '<p class="dica">Nenhum tema. Adicione abaixo.</p>';
+  $('#radar-historico').innerHTML = historico.length ? historico.map((h) => `<li><div class="item"><span class="t">${esc(fmtData(h.dia))}</span><span class="h">${h.status === 'pronto' ? '' : esc(h.status)}</span><span class="d">${esc(h.manchete || '')}</span></div></li>`).join('') : '<li><p class="vazio">Ainda sem edições.</p></li>';
+  const box = $('#radar-edicao');
+  const botoes = `<div class="radar-acoes"><button class="btn claro" data-radar="atualizar">Atualizar agora</button><button class="btn claro" data-radar="conversar">Conversar sobre isso</button></div>`;
+  if (!e) { box.innerHTML = `<div class="processando"><p>O Radar ainda não rodou. Toque em atualizar para a primeira leitura (leva uns 2 minutos).</p>${botoes}</div>`; return; }
+  if (e.status === 'pesquisando') {
+    box.innerHTML = `<div class="processando"><p class="pulsando"><b>Lendo a internet…</b></p><p class="dica">Notícias, concorrentes e regulação dos seus temas. Leva uns 2 minutos; eu aviso quando ficar pronto.</p></div>`;
+    Radar.timer = setTimeout(() => location.hash === '#radar' && carregarRadar().catch(() => {}), 10000);
+    return;
+  }
+  if (e.status === 'erro') { box.innerHTML = `<div class="processando"><p><b>A última leitura falhou.</b></p><p class="dica">${esc(e.erro || '')}</p>${botoes}</div>`; return; }
+  const c = e.conteudo || {}, an = c.analise || {};
+  const lista = (t, arr) => arr?.length ? `<div class="bloco-o"><h3>${t}</h3><ul class="marcadores">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  box.innerHTML = `<article class="manchete"><small>Radar de ${esc(fmtData(e.dia))}</small><b>${esc(c.manchete || '')}</b></article>
+    <div class="bloco-o"><h3>Notícias</h3>${(c.noticias || []).map((n) => `<div class="noticia"><span class="n-tema">${esc(n.tema || '')}</span><b>${esc(n.titulo)}</b><p>${esc(n.resumo || '')}</p>${n.impacto ? `<p class="n-impacto">→ ${esc(n.impacto)}</p>` : ''}${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.fonte || dominio(n.url))} ›</a>` : n.fonte ? `<p class="dica">${esc(n.fonte)}</p>` : ''}</div>`).join('') || '<p>Nada relevante hoje.</p>'}</div>
+    ${lista('Oportunidades para você', an.oportunidades)}${lista('Concorrentes', an.concorrentes)}${lista('Tendências', an.tendencias)}${lista('Riscos', an.riscos)}
+    ${c.aprender?.length ? `<div class="bloco-o"><h3>Para aprender</h3>${c.aprender.map((a) => `<details><summary>${esc(a.conceito)}</summary><p>${esc(a.explicacao)}</p></details>`).join('')}</div>` : ''}
+    ${botoes}`;
+}
+$('#v-radar').addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-radar-tema]');
+  if (t) { if (!confirm('Parar de acompanhar este tema?')) return; try { await api(`/radar/temas/${t.dataset.radarTema}/remover`, { metodo: 'POST' }); carregarRadar(); } catch (err) { aviso(err.message); } return; }
+  const b = e.target.closest('[data-radar]'); if (!b) return;
+  if (b.dataset.radar === 'atualizar') { b.disabled = true; try { await api('/radar/atualizar', { metodo: 'POST' }); aviso('Lendo a internet… leva uns 2 minutos.'); setTimeout(() => carregarRadar().catch(() => {}), 2500); } catch (err) { aviso(err.message); b.disabled = false; } }
+  if (b.dataset.radar === 'conversar') perguntarAoDimy('Me explica o Radar de hoje: o que mais importa para o meu negócio e o que eu devo fazer com isso?');
+});
+$('#form-tema').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tema = $('#radar-novo').value.trim(); if (!tema) return;
+  try { await api('/radar/temas', { metodo: 'POST', corpo: { tema } }); $('#radar-novo').value = ''; aviso('Tema adicionado ao Radar.'); carregarRadar(); } catch (err) { aviso(err.message); }
+});
+$('#form-web').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const q = $('#web-pergunta').value.trim(); if (!q) return;
+  $('#web-pergunta').value = '';
+  perguntarAoDimy(`Pesquise na internet e me responda com as fontes: ${q}`);
+});
+function perguntarAoDimy(t) {
+  ir('conversa');
+  setTimeout(() => { const c = $('#texto'); c.value = t; c.dispatchEvent(new Event('input')); $('#form-chat').requestSubmit(); }, 500);
+}
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
 // Ao voltar para o app, atualiza a tela atual.
