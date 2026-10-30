@@ -153,6 +153,7 @@ async function carregarHoje() {
   $('#hoje-saudacao').textContent = saudacao();
   const hoje = diaISO(new Date());
   $('#hoje-data').textContent = nomeDia(hoje, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  Agenda.inicioSemana = null; // sempre busca a agenda de novo (o Dimy pode ter marcado algo enquanto o app estava aberto)
   const [d] = await Promise.all([api('/hoje'), carregarSemana()]);
   atualizarBadges(d);
 
