@@ -6,6 +6,7 @@ const ORACULO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/oraculo';
 const EQUIPE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/equipe';
 const EXTRA = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/extra';
 const DOCUMENTO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/documento';
+const AGENDADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/agendador';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -22,7 +23,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v25';
+const VERSAO = 'v26';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -68,7 +69,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -843,7 +844,39 @@ async function carregarContato(wa) {
   box.lastElementChild?.scrollIntoView({ block: 'end' });
   $('#resposta').value = '';
   linkWhats();
+  carregarRascunho(wa);
 }
+
+// Resposta do agendador que espera aprovação (o Dimy não envia sozinho quando há dúvida ou você está na conversa).
+let rascunhoAtual = null;
+async function carregarRascunho(wa) {
+  const card = $('#contato-rascunho');
+  card.hidden = true; rascunhoAtual = null;
+  if (eu && !eu.dono) return;
+  try {
+    const { rascunhos } = await api(`/rascunhos?wa=${encodeURIComponent(wa)}`);
+    const r = rascunhos?.[0];
+    if (!r || contatoAtual !== wa) return;
+    rascunhoAtual = r;
+    $('#rascunho-motivo').textContent = r.motivo || '';
+    $('#rascunho-texto').textContent = r.texto;
+    card.hidden = false;
+    card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  } catch { /* sem rascunho */ }
+}
+async function decidirRascunho(enviar) {
+  const r = rascunhoAtual; if (!r) return;
+  const b1 = $('#b-rascunho-enviar'), b2 = $('#b-rascunho-descartar');
+  b1.disabled = b2.disabled = true;
+  try {
+    const { mensagem } = await api(`/rascunhos/${r.id}/${enviar ? 'enviar' : 'descartar'}`, { metodo: 'POST', corpo: {} });
+    aviso(mensagem);
+    $('#contato-rascunho').hidden = true; rascunhoAtual = null;
+    if (enviar && contatoAtual) carregarContato(contatoAtual);
+  } catch (e) { aviso(e.message); } finally { b1.disabled = b2.disabled = false; }
+}
+$('#b-rascunho-enviar').addEventListener('click', () => decidirRascunho(true));
+$('#b-rascunho-descartar').addEventListener('click', () => decidirRascunho(false));
 
 let contatoInfo = null;
 const RELACAO = { cliente: 'Cliente', prospect: 'Prospect', parceiro: 'Parceiro', fornecedor: 'Fornecedor', equipe: 'Equipe', familia: 'Família', amigo: 'Amigo', servico: 'Serviço', outro: 'Contato' };
