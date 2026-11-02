@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{var t=localStorage.getItem('cerebro-tema');if(t==='claro'||t==='escuro'){document.documentElement.dataset.theme=t==='claro'?'light':'dark';document.documentElement.dataset.tema=t}}catch(e){}</script>
-  <link rel="stylesheet" href="style.css?v=35">
+  <link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -285,6 +285,13 @@
     <!-- WhatsApp -->
     <section id="v-whats" class="vista" data-titulo="WhatsApp" hidden>
       <header class="topo"><h1>WhatsApp</h1><p class="sub">Quem espera você aparece primeiro.</p></header>
+      <form id="busca-contatos" class="busca-ct" role="search" autocomplete="off">
+        <svg class="busca-lupa" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="busca-q" type="search" placeholder="Nome, empresa, assunto ou número" enterkeyhint="search" aria-label="Pesquisar contatos">
+        <button type="button" id="busca-limpar" class="busca-x" aria-label="Limpar" hidden><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        <button type="button" id="busca-voz" class="busca-mic" aria-label="Pesquisar por voz"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg></button>
+      </form>
+      <p id="busca-status" class="busca-status" hidden></p>
       <ul id="lista-contatos" class="lista"></ul>
       <article id="whats-desconectado" class="cartao-info" hidden>
         <span class="ic verde"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg></span>
@@ -509,6 +516,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=35" type="module"></script>
+  <script src="app.js?v=36" type="module"></script>
 </body>
 </html>

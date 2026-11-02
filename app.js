@@ -25,7 +25,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v35';
+const VERSAO = 'v36';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -896,8 +896,100 @@ async function carregarContatos() {
   contatos.sort((a, b) => (b.awaiting_reply - a.awaiting_reply) || (new Date(b.last_seen) - new Date(a.last_seen)));
   $('#lista-contatos').hidden = !contatos.length;
   $('#whats-desconectado').hidden = !!contatos.length;
-  $('#lista-contatos').innerHTML = contatos.map((c) => `<li><button class="pessoa" data-ir="contato/${esc(c.wa_id)}"><span class="avatar-p">${esc(iniciais(nomeDe(c)))}</span><span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}${c.muted ? ' · silenciado' : ''}</span><span class="d">${esc(c.last_summary || '')}</span></span><span class="h">${c.awaiting_reply ? '<i class="etiqueta">espera</i>' : quando(c.last_seen)}</span></button></li>`).join('');
+  Busca.todos = contatos;
+  if ($('#busca-q').value.trim()) buscarContatos($('#busca-q').value); else desenharContatos(contatos);
 }
+const linhaContato = (c) => `<li><button class="pessoa" data-ir="contato/${esc(c.wa_id)}">${avatar(c, 'grande')}<span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}${c.muted ? ' · silenciado' : ''}</span><span class="d">${esc([/unknown/i.test(c.empresa || '') ? '' : c.empresa, c.last_summary].filter(Boolean).join(' · ') || (nomeValido(c.name) ? foneBonito(c.wa_id) : ''))}</span></span><span class="h">${c.awaiting_reply ? '<i class="etiqueta">espera</i>' : c.last_seen ? quando(c.last_seen) : ''}</span></button></li>`;
+function desenharContatos(lista, vazio = '') {
+  $('#lista-contatos').hidden = false;
+  $('#lista-contatos').innerHTML = lista.length ? lista.map(linhaContato).join('') : `<li class="busca-vazio">${esc(vazio || 'Nenhum contato.')}</li>`;
+}
+
+// ---- Pesquisa de contatos: digitando (filtra na hora e busca no servidor) ou por voz ----
+const Busca = { todos: [], timer: 0, seq: 0, gravando: null };
+const semAcentoCli = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function filtroLocal(q) {
+  const ws = semAcentoCli(q).split(/\s+/).filter(Boolean), dig = q.replace(/\D/g, '');
+  return Busca.todos.filter((c) => {
+    const alvo = semAcentoCli(`${c.name || ''} ${c.last_summary || ''}`);
+    return (dig.length >= 4 && c.wa_id.includes(dig)) || (ws.length && ws.every((w) => alvo.includes(w)));
+  });
+}
+function buscarContatos(texto) {
+  const q = texto.trim();
+  $('#busca-limpar').hidden = !q;
+  clearTimeout(Busca.timer);
+  if (!q) { $('#busca-status').hidden = true; desenharContatos(Busca.todos); return; }
+  desenharContatos(filtroLocal(q), 'Procurando…');
+  const seq = ++Busca.seq;
+  Busca.timer = setTimeout(async () => {
+    try {
+      const { contatos } = await api(`/atendente/contatos?q=${encodeURIComponent(q)}`);
+      if (seq !== Busca.seq) return;
+      desenharContatos(contatos, `Nada encontrado para "${q}".`);
+      $('#busca-status').hidden = false;
+      $('#busca-status').textContent = contatos.length ? `${contatos.length} contato${contatos.length > 1 ? 's' : ''} para "${q}"` : '';
+      if (contatos.length === 1 && Busca.porVoz) ir(`contato/${contatos[0].wa_id}`);
+    } catch (e) { if (seq === Busca.seq) aviso(e.message); }
+    finally { Busca.porVoz = false; }
+  }, 250);
+}
+$('#busca-q').addEventListener('input', (e) => buscarContatos(e.target.value));
+$('#busca-contatos').addEventListener('submit', (e) => { e.preventDefault(); $('#busca-q').blur(); buscarContatos($('#busca-q').value); });
+$('#busca-limpar').addEventListener('click', () => { $('#busca-q').value = ''; buscarContatos(''); $('#busca-q').focus(); });
+// Por voz: toque, fale o nome/empresa/número, toque de novo (ou pare de falar) e a busca roda.
+const FALA_BUSCA = /^(?:dimy[,\s]+)?(?:me\s+)?(?:(?:procura|pesquisa|busca|acha|encontra|mostra|abre)r?\s+)?(?:(?:o|a|os|as)\s+)?(?:(?:contato|conversa)s?\s+)?(?:(?:do|da|dos|das|de|com(?:\s+[oa])?)\s+)?/i;
+async function buscaPorVoz() {
+  const b = $('#busca-voz');
+  if (Busca.gravando) { Busca.gravando.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { aviso('Este aparelho não grava áudio pelo app.'); return; }
+  try { speechSynthesis.cancel(); } catch { /* sem voz */ }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch { aviso('Libere o microfone para o app nos Ajustes do iPhone.'); return; }
+  const tipo = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find((m) => MediaRecorder.isTypeSupported?.(m)) || '';
+  const mr = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined), pedacos = [];
+  Busca.gravando = mr;
+  const inicio = performance.now();
+  let ctx, an, raf, falou = false, ultima = 0, base = 0.006;
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume?.(); an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an); } catch { an = null; }
+  const buf = an ? new Float32Array(1024) : null;
+  const medir = () => {
+    if (mr.state !== 'recording') return;
+    const agora = performance.now();
+    if (buf) {
+      an.getFloatTimeDomainData(buf); let s = 0; for (const v of buf) s += v * v; const rms = Math.sqrt(s / buf.length);
+      if (agora - inicio < 300) base = Math.max(base, rms * 0.9);
+      if (rms > Math.max(0.015, base * 2.5)) { falou = true; ultima = agora; }
+      b.style.setProperty('--nivel', Math.min(1, rms / 0.12).toFixed(2));
+      if (falou && agora - ultima > 1200) { mr.stop(); return; }
+      if (!falou && agora - inicio > 6000) { mr.stop(); return; }
+    }
+    if (agora - inicio > 12000) { mr.stop(); return; }
+    raf = requestAnimationFrame(medir);
+  };
+  mr.ondataavailable = (ev) => ev.data.size && pedacos.push(ev.data);
+  mr.onstop = async () => {
+    cancelAnimationFrame(raf); stream.getTracks().forEach((t) => t.stop()); try { ctx?.close(); } catch { /* ok */ }
+    Busca.gravando = null; b.classList.remove('ouvindo'); b.style.removeProperty('--nivel');
+    const mime = (mr.mimeType || 'audio/mp4').split(';')[0];
+    const audio = new Blob(pedacos, { type: mime });
+    if ((buf && !falou) || audio.size < 1500) { $('#busca-q').placeholder = 'Nome, empresa, assunto ou número'; aviso('Não ouvi nada. Toque no microfone e fale o nome.'); return; }
+    $('#busca-q').value = ''; $('#busca-q').placeholder = 'Entendendo…'; b.classList.add('pensando');
+    try {
+      const { texto } = await api('/atendente/transcrever', { metodo: 'POST', corpo: audio, tipo: mime });
+      const q = String(texto || '').replace(/[.!?]+$/, '').replace(FALA_BUSCA, '').trim();
+      if (!q) { aviso('Não entendi. Toque e fale o nome de novo.'); return; }
+      $('#busca-q').value = q; Busca.porVoz = true; buscarContatos(q);
+    } catch (e) { aviso(erroAmigavel(e.message)); }
+    finally { b.classList.remove('pensando'); $('#busca-q').placeholder = 'Nome, empresa, assunto ou número'; }
+  };
+  mr.start(250);
+  b.classList.add('ouvindo'); $('#busca-q').placeholder = 'Ouvindo… fale o nome';
+  if (navigator.vibrate) navigator.vibrate(20);
+  medir();
+}
+$('#busca-voz').addEventListener('click', () => buscaPorVoz().catch((e) => aviso(erroAmigavel(e.message))));
 
 let contatoAtual = null;
 async function carregarContato(wa) {

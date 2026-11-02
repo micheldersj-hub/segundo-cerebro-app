@@ -893,3 +893,19 @@ body.com-voz { overflow: hidden; }
 .tf-acoes [data-tf-acao="hoje"] { background: var(--mar-claro); color: var(--mar); }
 .tf-vazio { margin: 0 auto; text-align: center; font-size: 13px; color: var(--tinta-fraca); padding: 6px 12px 2px; max-width: 280px; }
 .tf-adiar-todas { margin-top: 18px; }
+
+/* ---------- Pesquisa de contatos ---------- */
+.busca-ct { position: sticky; top: 8px; z-index: 4; display: flex; align-items: center; gap: 6px; background: var(--superficie); border-radius: 999px; box-shadow: var(--sombra); padding: 5px 5px 5px 14px; margin: 4px 0 14px; }
+.busca-lupa { width: 18px; height: 18px; fill: none; stroke: var(--tinta-fraca); stroke-width: 2.2; stroke-linecap: round; flex: none; }
+.busca-ct input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 16px; color: var(--tinta); padding: 8px 2px; outline: none; -webkit-appearance: none; }
+.busca-ct input::-webkit-search-cancel-button { display: none; }
+.busca-x { width: 30px; height: 30px; border: 0; border-radius: 50%; background: var(--superficie-2); color: var(--tinta-suave); display: grid; place-items: center; flex: none; }
+.busca-x svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.busca-mic { --nivel: 0; width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--mar); color: #fff; display: grid; place-items: center; flex: none; transition: transform .15s, box-shadow .15s; }
+.busca-mic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.busca-mic.ouvindo { background: var(--gravar); box-shadow: 0 0 0 calc(4px + var(--nivel) * 10px) color-mix(in srgb, var(--gravar) 25%, transparent); }
+.busca-mic.pensando { opacity: .6; animation: pulso 1s infinite; }
+@keyframes pulso { 50% { transform: scale(.9); } }
+.busca-status { margin: -6px 4px 10px; font-size: 13px; color: var(--tinta-suave); }
+.busca-vazio { list-style: none; padding: 18px; text-align: center; color: var(--tinta-fraca); font-size: 14px; }
+.av.grande { width: 40px; height: 40px; font-size: 14px; }
