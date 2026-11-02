@@ -909,3 +909,20 @@ body.com-voz { overflow: hidden; }
 .busca-status { margin: -6px 4px 10px; font-size: 13px; color: var(--tinta-suave); }
 .busca-vazio { list-style: none; padding: 18px; text-align: center; color: var(--tinta-fraca); font-size: 14px; }
 .av.grande { width: 40px; height: 40px; font-size: 14px; }
+
+/* Tarefas: tudo cabe na largura do celular (textos longos quebram em vez de empurrar a tela) */
+#v-tarefas { max-width: 100%; overflow-x: clip; }
+#v-tarefas .topo, .tf-funil, .tf-etapa, .tf-cards, .tf-atrasadas, .tf-nova { min-width: 0; max-width: 100%; }
+.tf-card { min-width: 0; width: 100%; box-sizing: border-box; }
+.tf-corpo { display: flex; flex-direction: column; align-items: stretch; min-width: 0; overflow: hidden; }
+.tf-t { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; }
+.tf-meta { min-width: 0; max-width: 100%; }
+.tf-nota { display: block; flex: 1 1 100%; min-width: 0; }
+.tf-boca { max-width: 100%; box-sizing: border-box; }
+.tf-semana { min-width: 0; }
+.tf-dia-rotulo { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 360px) { .tf-dia-rotulo.fora::after { content: ''; } .tf-acoes button { width: 30px; height: 30px; } }
+/* Nenhuma tela passa da largura do celular; textos e links longos quebram linha */
+.vista { max-width: 100%; overflow-x: clip; }
+.bolha, .pessoa-corpo, .espera-corpo, .rascunho-texto, .lembrete-t { overflow-wrap: anywhere; }
+.rascunho-texto { white-space: pre-wrap; }
