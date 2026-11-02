@@ -25,7 +25,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v37';
+const VERSAO = 'v38';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -3003,7 +3003,7 @@ function cartaoTarefa(t, atrasada = false) {
     <button class="tf-corpo" data-tf-acao="editar"><span class="tf-t">${esc(t.titulo)}</span>${pri || adi || atr || t.notas ? `<span class="tf-meta">${pri}${atr}${adi}${t.notas ? `<span class="tf-nota">${esc(t.notas)}</span>` : ''}</span>` : ''}</button>
     ${feito ? '' : `<div class="tf-acoes">
       ${atrasada ? '<button data-tf-acao="hoje" aria-label="Trazer para hoje" title="Trazer para hoje"><svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>'
-        : `<button data-tf-acao="avancar" aria-label="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}" title="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg></button>`}
+        : `${t.etapa === 'fazendo' ? '<button data-tf-acao="voltar" aria-label="Voltar para A fazer" title="Voltar para A fazer"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>' : ''}<button data-tf-acao="avancar" aria-label="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}" title="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg></button>`}
       <button data-tf-acao="adiar" aria-label="Passar para o próximo dia" title="Próximo dia"><svg viewBox="0 0 24 24"><path d="M5 12h12m-5-6 6 6-6 6"/></svg></button>
     </div>`}
   </li>`;
@@ -3089,11 +3089,12 @@ $('#v-tarefas').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-tf-acao]'); if (!b) return;
   const li = b.closest('[data-tf]'), t = tarefaPorId(li?.dataset.tf); if (!t) return;
   const acao = b.dataset.tfAcao;
-  if (acao === 'editar') { editarTarefa(t); return; }
+  if (acao === 'editar') { abrirMenuTarefa(t); return; }
   li.classList.add('mexendo');
   try {
     if (acao === 'concluir') await mudarTarefa(t.id, { etapa: 'feito' }, 'Feito! ✅');
     if (acao === 'reabrir') await mudarTarefa(t.id, { etapa: 'a_fazer' });
+    if (acao === 'voltar') await mudarTarefa(t.id, { etapa: 'a_fazer' }, 'Voltou para A fazer.');
     if (acao === 'avancar') await mudarTarefa(t.id, { etapa: PROXIMA[t.etapa] }, t.etapa === 'fazendo' ? 'Feito! ✅' : null);
     if (acao === 'hoje') await mudarTarefa(t.id, { dia: TF.dados.hoje }, 'Trouxe para hoje.');
     if (acao === 'adiar') {
@@ -3112,4 +3113,34 @@ $('#tf-adiar-pendentes').addEventListener('click', async (e) => {
   const b = e.currentTarget; b.disabled = true;
   try { const r = await api('/tarefas/adiar-pendentes', { metodo: 'POST', corpo: { dia: TF.dia } }); aviso(`${r.movidas} tarefa${r.movidas > 1 ? 's' : ''} para ${rotuloDia(r.para).toLowerCase()}.`); await carregarTarefas(); }
   catch (err) { aviso(err.message); } finally { b.disabled = false; }
+});
+
+// Menu da tarefa: mover para qualquer etapa (inclusive voltar), trazer para hoje, adiar, editar, remover.
+let tfMenuAtual = null;
+const NOME_ETAPA = { a_fazer: 'A fazer', fazendo: 'Fazendo', feito: 'Feito' };
+function abrirMenuTarefa(t) {
+  tfMenuAtual = t;
+  const hoje = TF.dados?.hoje || diaISO(new Date());
+  $('#tf-menu-titulo').textContent = t.titulo;
+  $('#tf-menu-sub').textContent = [`Está em ${NOME_ETAPA[t.etapa]}`, rotuloDia(t.dia), t.adiada_vezes ? `adiada ${t.adiada_vezes}×` : '', t.notas || ''].filter(Boolean).join(' · ');
+  document.querySelectorAll('[data-tf-etapa]').forEach((b) => { b.classList.toggle('atual', b.dataset.tfEtapa === t.etapa); b.disabled = b.dataset.tfEtapa === t.etapa; });
+  document.querySelector('[data-tf-menu="hoje"]').hidden = t.dia === hoje;
+  document.querySelector('[data-tf-menu="adiar"]').hidden = t.etapa === 'feito';
+  const m = $('#tf-menu'); m.hidden = false; requestAnimationFrame(() => m.classList.add('aberta'));
+}
+function fecharMenuTarefa() { const m = $('#tf-menu'); m.classList.remove('aberta'); setTimeout(() => (m.hidden = true), 220); }
+$('#tf-menu').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-tf-fechar]')) { fecharMenuTarefa(); return; }
+  const t = tfMenuAtual; if (!t) return;
+  const et = e.target.closest('[data-tf-etapa]'), ac = e.target.closest('[data-tf-menu]');
+  if (!et && !ac) return;
+  try {
+    if (et) { fecharMenuTarefa(); await mudarTarefa(t.id, { etapa: et.dataset.tfEtapa }, `Movida para ${NOME_ETAPA[et.dataset.tfEtapa]}.`); return; }
+    const acao = ac.dataset.tfMenu;
+    fecharMenuTarefa();
+    if (acao === 'editar') { setTimeout(() => editarTarefa(t), 230); return; }
+    if (acao === 'hoje') await mudarTarefa(t.id, { dia: TF.dados?.hoje || diaISO(new Date()) }, 'Trouxe para hoje.');
+    if (acao === 'adiar') { const r = await api(`/tarefas/${t.id}/adiar`, { metodo: 'POST' }); aviso(`Passei para ${rotuloDia(r.tarefa?.dia || proxUtil(TF.dia)).toLowerCase()}.`); await carregarTarefas(); }
+    if (acao === 'arquivar') { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Tarefa removida.'); await carregarTarefas(); }
+  } catch (err) { aviso(err.message); }
 });

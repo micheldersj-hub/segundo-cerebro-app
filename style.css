@@ -926,3 +926,17 @@ body.com-voz { overflow: hidden; }
 .vista { max-width: 100%; overflow-x: clip; }
 .bolha, .pessoa-corpo, .espera-corpo, .rascunho-texto, .lembrete-t { overflow-wrap: anywhere; }
 .rascunho-texto { white-space: pre-wrap; }
+
+/* Menu da tarefa */
+.tf-menu-painel h2 { font-size: 18px; overflow-wrap: anywhere; }
+.tf-menu-painel .dica { margin: -6px 0 0; overflow-wrap: anywhere; }
+.tf-menu-rot { font-size: 13px; font-weight: 700; color: var(--tinta-suave); }
+.tf-etapas-escolha { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tf-etapas-escolha button { display: grid; justify-items: center; gap: 6px; padding: 12px 6px; border-radius: 14px; border: 2px solid transparent; background: var(--superficie-2); color: var(--tinta); font: inherit; font-weight: 700; font-size: 14px; }
+.tf-etapas-escolha i { width: 12px; height: 12px; border-radius: 50%; }
+.tf-etapas-escolha .azul i { background: #3B82F6; } .tf-etapas-escolha .ambar i { background: #F59E0B; } .tf-etapas-escolha .verde i { background: #10B981; }
+.tf-etapas-escolha button.atual { border-color: var(--linha); opacity: .55; }
+.tf-etapas-escolha button.atual::after { content: 'atual'; font-size: 11px; font-weight: 600; color: var(--tinta-suave); }
+.tf-etapas-escolha button:not(.atual):active { transform: scale(.97); }
+.tf-menu-acoes { display: grid; gap: 8px; margin-top: 4px; }
+.tf-acoes [data-tf-acao="voltar"] svg { fill: none; }

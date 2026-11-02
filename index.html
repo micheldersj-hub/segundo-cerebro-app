@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{var t=localStorage.getItem('cerebro-tema');if(t==='claro'||t==='escuro'){document.documentElement.dataset.theme=t==='claro'?'light':'dark';document.documentElement.dataset.tema=t}}catch(e){}</script>
-  <link rel="stylesheet" href="style.css?v=37">
+  <link rel="stylesheet" href="style.css?v=38">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -493,6 +493,26 @@
       <button type="button" class="link perigo" id="folha-apagar" hidden>Apagar</button>
     </form>
   </div>
+  <div id="tf-menu" class="folha" hidden>
+    <div class="folha-fundo" data-tf-fechar></div>
+    <div class="folha-painel tf-menu-painel" role="dialog" aria-labelledby="tf-menu-titulo">
+      <div class="folha-alca"></div>
+      <h2 id="tf-menu-titulo"></h2>
+      <p id="tf-menu-sub" class="dica"></p>
+      <span class="tf-menu-rot">Mover para</span>
+      <div class="tf-etapas-escolha">
+        <button data-tf-etapa="a_fazer" class="azul"><i></i>A fazer</button>
+        <button data-tf-etapa="fazendo" class="ambar"><i></i>Fazendo</button>
+        <button data-tf-etapa="feito" class="verde"><i></i>Feito</button>
+      </div>
+      <div class="tf-menu-acoes">
+        <button data-tf-menu="hoje" class="btn claro largo">Trazer para hoje</button>
+        <button data-tf-menu="adiar" class="btn claro largo">Passar para o próximo dia útil</button>
+        <button data-tf-menu="editar" class="btn claro largo">Editar detalhes</button>
+        <button data-tf-menu="arquivar" class="link perigo">Remover da lista</button>
+      </div>
+    </div>
+  </div>
   <!-- Comando de voz: toque no botão do centro e fale -->
   <div id="voz" class="voz" hidden>
     <div class="voz-fundo" data-voz-fechar></div>
@@ -516,6 +536,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=37" type="module"></script>
+  <script src="app.js?v=38" type="module"></script>
 </body>
 </html>
