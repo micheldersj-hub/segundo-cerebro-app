@@ -9,6 +9,7 @@ const DOCUMENTO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/documen
 const AGENDADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/agendador';
 const ATENDENTE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/atendente';
 const TAREFAS = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/tarefas';
+const OLHO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/olho';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -25,7 +26,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v38';
+const VERSAO = 'v39';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -71,8 +72,9 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/olho/.test(caminho) ? OLHO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   if (base === TAREFAS) caminho = caminho.replace(/^\/tarefas/, '');
+  if (base === OLHO) caminho = caminho.replace(/^\/olho/, '');
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -119,9 +121,9 @@ function ha(iso) {
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar',
+  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar', olho: '#v-olho',
 };
-const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje' };
+const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje', olho: 'hoje' };
 
 function ir(destino) { location.hash = destino; }
 
@@ -148,6 +150,7 @@ async function rota() {
     if (vista === 'oraculo') await carregarOraculo();
     if (vista === 'dossie') await carregarDossie(arg);
     if (vista === 'radar') await carregarRadar();
+    if (vista === 'olho') await carregarOlho();
   } catch (e) { aviso(e.message); }
 }
 
@@ -292,6 +295,7 @@ function gradeDoMes(mes) {
 const mesSeguinte = (mes, n) => { const [a, m] = mes.split('-').map(Number); const d = new Date(Date.UTC(a, m - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
 async function carregarHoje() {
+  olhoResumo().catch(() => {});
   api('/tarefas').then((d) => { const n = d.tarefas.filter((t) => t.etapa !== 'feito').length + d.atrasadas.length; $('#badge-tarefas').hidden = !n; $('#badge-tarefas').textContent = n; }).catch(() => {});
   $('#hoje-saudacao').textContent = saudacao();
   const hoje = diaISO(new Date());
@@ -2927,6 +2931,7 @@ function executarAcoes(acoes) {
       } else if (d.tela) destino = { ir: d.tela === 'avisos' ? 'mais' : d.tela, rotulo: 'Abrir', auto: true };
     } else if (/^agenda_|^lembrete_/.test(a.ferramenta) && !destino) destino = { ir: 'hoje', rotulo: 'Ver agenda', auto: false };
     else if (a.ferramenta === 'whatsapp_conversa' && !destino) destino = { ir: 'whats', rotulo: 'Abrir WhatsApp', auto: false };
+    else if (a.ferramenta === 'olho_consultar' && !destino) destino = { ir: d.empresa_id ? `olho/empresa/${d.empresa_id}` : 'olho', rotulo: 'Abrir Olho de Deus', auto: false };
     else if (/^tarefa/.test(a.ferramenta) && !destino) { if (d.dia) TF.dia = d.dia; if (location.hash === '#tarefas') carregarTarefas().catch(() => {}); destino = { ir: 'tarefas', rotulo: 'Ver tarefas', auto: false }; }
   }
   return destino;
@@ -2996,11 +3001,12 @@ async function carregarTarefas(dia) {
 function cartaoTarefa(t, atrasada = false) {
   const pri = t.prioridade === 1 ? '<span class="tf-tag alta">Prioridade</span>' : '';
   const adi = t.adiada_vezes ? `<span class="tf-tag">adiada ${t.adiada_vezes}×</span>` : '';
-  const atr = atrasada ? `<span class="tf-tag atr">de ${nomeDia(t.dia, { day: '2-digit', month: 'short' }).replace('.', '')}</span>` : '';
+  const atr = atrasada ? `<span class="tf-tag atr">${t.dia > diaISO(new Date()) ? 'marcada p/' : 'de'} ${nomeDia(t.dia, { day: '2-digit', month: 'short' }).replace('.', '')}</span>` : '';
   const feito = t.etapa === 'feito';
+  const extras = tagsTarefa(t, feito);
   return `<li class="tf-card ${feito ? 'feito' : ''} ${t.prioridade === 1 ? 'p1' : ''}" data-tf="${esc(t.id)}">
     <button class="tf-check" data-tf-acao="${feito ? 'reabrir' : 'concluir'}" aria-label="${feito ? 'Reabrir' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg></button>
-    <button class="tf-corpo" data-tf-acao="editar"><span class="tf-t">${esc(t.titulo)}</span>${pri || adi || atr || t.notas ? `<span class="tf-meta">${pri}${atr}${adi}${t.notas ? `<span class="tf-nota">${esc(t.notas)}</span>` : ''}</span>` : ''}</button>
+    <button class="tf-corpo" data-tf-acao="editar"><span class="tf-t">${esc(t.titulo)}</span>${pri || adi || atr || extras || t.notas ? `<span class="tf-meta">${pri}${extras}${atr}${adi}${t.notas ? `<span class="tf-nota">${esc(t.notas)}</span>` : ''}</span>` : ''}</button>
     ${feito ? '' : `<div class="tf-acoes">
       ${atrasada ? '<button data-tf-acao="hoje" aria-label="Trazer para hoje" title="Trazer para hoje"><svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>'
         : `${t.etapa === 'fazendo' ? '<button data-tf-acao="voltar" aria-label="Voltar para A fazer" title="Voltar para A fazer"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>' : ''}<button data-tf-acao="avancar" aria-label="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}" title="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg></button>`}
@@ -3025,6 +3031,14 @@ function desenharTarefas(d) {
   const pct = ts.length ? Math.round((feitas / ts.length) * 100) : 0;
   $('#tf-barra').style.width = `${pct}%`;
   $('#tf-progresso-txt').textContent = ts.length ? `${feitas} de ${ts.length} feitas` : 'Nenhuma tarefa neste dia';
+  // prazos chegando (vencidos, hoje e próximos 2 dias) que não estão na lista do dia
+  const noDia = new Set([...ts, ...d.atrasadas].map((t) => t.id));
+  const prazos = (d.prazos || []).filter((t) => !noDia.has(t.id));
+  $('#tf-prazos').hidden = !prazos.length || d.dia !== hoje;
+  $('#tf-lista-prazos').innerHTML = prazos.map((t) => cartaoTarefa(t, true)).join('');
+  const nSug = d.sugestoes_pendentes || 0;
+  $('#tf-b-sug').hidden = !nSug;
+  $('#tf-b-sug').textContent = `✨ ${nSug} sugest${nSug > 1 ? 'ões' : 'ão'} do Dimy`;
   // atrasadas (só em hoje)
   $('#tf-atrasadas').hidden = !d.atrasadas.length;
   $('#tf-lista-atrasadas').innerHTML = d.atrasadas.map((t) => cartaoTarefa(t, true)).join('');
@@ -3043,7 +3057,7 @@ function desenharTarefas(d) {
   const bt = $('#badge-tarefas');
   if (d.dia === hoje) { const n = ts.filter((t) => t.etapa !== 'feito').length + d.atrasadas.length; bt.hidden = !n; bt.textContent = n; }
 }
-const tarefaPorId = (id) => [...(TF.dados?.tarefas || []), ...(TF.dados?.atrasadas || [])].find((t) => t.id === id);
+const tarefaPorId = (id) => [...(TF.dados?.tarefas || []), ...(TF.dados?.atrasadas || []), ...(TF.dados?.prazos || [])].find((t) => t.id === id);
 async function mudarTarefa(id, corpo, msg) {
   await api(`/tarefas/${id}`, { metodo: 'POST', corpo });
   if (msg) aviso(msg);
@@ -3058,13 +3072,19 @@ function editarTarefa(t) {
       { rotulo: 'Dia', nome: 'dia', tipoInput: 'date', valor: t?.dia || TF.dia },
       { tipo: 'escolha', rotulo: 'Prioridade', nome: 'prioridade', opcoes: [{ texto: 'Alta', valor: '1', marcado: t?.prioridade === 1 }, { texto: 'Normal', valor: '2', marcado: !t || t.prioridade === 2 }, { texto: 'Baixa', valor: '3', marcado: t?.prioridade === 3 }] },
       { tipo: 'escolha', rotulo: 'Etapa', nome: 'etapa', opcoes: ETAPAS_TF.map((e) => ({ texto: e.nome, valor: e.id, marcado: (t?.etapa || 'a_fazer') === e.id })) },
+      { rotulo: 'Prazo final', nome: 'prazo', tipoInput: 'date', valor: t?.prazo || '', dica: 'Opcional. O dia acima é quando você vai fazer; o prazo é a data-limite.' },
+      { tipo: 'escolha', rotulo: 'Repetir', nome: 'recorrencia', opcoes: [['', 'Não repete'], ['diaria', 'Todo dia'], ['dias_uteis', 'Dias úteis'], ['semanal', 'Toda semana'], ['mensal', 'Todo mês']].map(([v, x]) => ({ texto: x, valor: v, marcado: (t?.recorrencia || '') === v })) },
+      { rotulo: 'Projeto', nome: 'projeto', valor: t?.projeto || '', placeholder: 'Ex.: Expansão BH, Rede Payments' },
+      { rotulo: 'Área', nome: 'area', valor: t?.area || '', placeholder: 'Ex.: Comercial, Financeiro, Parcerias' },
+      { rotulo: 'Empresa / cliente', nome: 'empresa', valor: t?.empresa || '', placeholder: 'Opcional' },
     ],
     salvar: async (f) => {
-      const corpo = { titulo: f.titulo, notas: f.notas || '', dia: f.dia || TF.dia, prioridade: Number(f.prioridade || 2), etapa: f.etapa || 'a_fazer' };
+      const corpo = { titulo: f.titulo, notas: f.notas || '', dia: f.dia || TF.dia, prioridade: Number(f.prioridade || 2), etapa: f.etapa || 'a_fazer',
+        prazo: f.prazo || null, recorrencia: f.recorrencia || null, projeto: f.projeto || null, area: f.area || null, empresa: f.empresa || null };
       if (t) await mudarTarefa(t.id, corpo, 'Tarefa atualizada.');
       else { await api('/tarefas', { metodo: 'POST', corpo }); await carregarTarefas(); }
     },
-    apagar: t ? async () => { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Tarefa removida.'); await carregarTarefas(); } : null,
+    apagar: t ? async () => { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Foi para a lixeira. Dá para restaurar em Lixeira.'); await carregarTarefas(); } : null,
   });
 }
 $('#tf-nova').addEventListener('submit', async (e) => {
@@ -3139,8 +3159,450 @@ $('#tf-menu').addEventListener('click', async (e) => {
     const acao = ac.dataset.tfMenu;
     fecharMenuTarefa();
     if (acao === 'editar') { setTimeout(() => editarTarefa(t), 230); return; }
+    if (acao === 'detalhe') { setTimeout(() => abrirDetalheTarefa(t.id), 230); return; }
     if (acao === 'hoje') await mudarTarefa(t.id, { dia: TF.dados?.hoje || diaISO(new Date()) }, 'Trouxe para hoje.');
     if (acao === 'adiar') { const r = await api(`/tarefas/${t.id}/adiar`, { metodo: 'POST' }); aviso(`Passei para ${rotuloDia(r.tarefa?.dia || proxUtil(TF.dia)).toLowerCase()}.`); await carregarTarefas(); }
-    if (acao === 'arquivar') { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Tarefa removida.'); await carregarTarefas(); }
+    if (acao === 'arquivar') { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Foi para a lixeira. Dá para restaurar em Lixeira.'); await carregarTarefas(); }
+  } catch (err) { aviso(err.message); }
+});
+// ---------------------------------------------------------------------------
+// Tarefas 2.0: projeto, prazo, repetição, subtarefas, histórico, lixeira, sugestões
+// ---------------------------------------------------------------------------
+const NOME_REPETE = { diaria: 'todo dia', dias_uteis: 'dias úteis', semanal: 'toda semana', mensal: 'todo mês' };
+const dataCurta = (d) => nomeDia(d, { day: '2-digit', month: 'short' }).replace('.', '');
+function rotuloPrazo(prazo, hoje = diaISO(new Date())) {
+  if (prazo < hoje) return { classe: 'venc', texto: `venceu ${dataCurta(prazo)}` };
+  if (prazo === hoje) return { classe: 'hoje', texto: 'vence hoje' };
+  if (prazo === somaDias(hoje, 1)) return { classe: 'perto', texto: 'vence amanhã' };
+  return { classe: '', texto: `prazo ${dataCurta(prazo)}` };
+}
+function tagsTarefa(t, feito) {
+  const tags = [];
+  if (t.projeto) tags.push(`<span class="tf-tag proj">${esc(t.projeto)}</span>`);
+  if (t.prazo && !feito) { const p = rotuloPrazo(t.prazo); tags.push(`<span class="tf-tag prazo ${p.classe}">${p.texto}</span>`); }
+  if (t.recorrencia) tags.push(`<span class="tf-tag rep" title="Repete ${NOME_REPETE[t.recorrencia]}">↻ ${NOME_REPETE[t.recorrencia]}</span>`);
+  if (t.subtarefas?.total) tags.push(`<span class="tf-tag sub ${t.subtarefas.feitas === t.subtarefas.total ? 'ok' : ''}">☑ ${t.subtarefas.feitas}/${t.subtarefas.total}</span>`);
+  if (t.empresa) tags.push(`<span class="tf-tag emp">${esc(t.empresa)}</span>`);
+  if (t.origem === 'olho') tags.push('<span class="tf-tag olho" title="Criada a partir do Olho de Deus">👁</span>');
+  return tags.join('');
+}
+
+const TFP = { modo: null, id: null };
+function abrirPainelTf(titulo) {
+  $('#tfp-titulo').textContent = titulo;
+  $('#tfp-corpo').innerHTML = '<p class="dica centro">Carregando…</p>';
+  const m = $('#tf-painel'); m.hidden = false; requestAnimationFrame(() => m.classList.add('aberta'));
+}
+function fecharPainelTf() { const m = $('#tf-painel'); m.classList.remove('aberta'); setTimeout(() => (m.hidden = true), 220); TFP.modo = null; }
+const NOME_ACAO_HIST = { criada: 'Criada', etapa: 'Etapa', dia: 'Dia', prazo: 'Prazo', editada: 'Editada', arquivada: 'Para a lixeira', restaurada: 'Restaurada', recorrencia: 'Repetição', nota: 'Anotação', subtarefa: 'Subtarefa' };
+const POR_HIST = { app: '', voz: 'por voz', sugestao: 'sugestão aceita', olho: 'Olho de Deus', sistema: 'automático', recorrencia: 'repetição', dimy: 'Dimy' };
+
+async function abrirDetalheTarefa(id) {
+  TFP.modo = 'detalhe'; TFP.id = id;
+  abrirPainelTf('Tarefa');
+  await desenharDetalheTarefa();
+}
+async function desenharDetalheTarefa() {
+  const { tarefa: t, subtarefas: subs, historico: hist } = await api(`/tarefas/${TFP.id}/detalhe`);
+  $('#tfp-titulo').textContent = t.titulo;
+  const feitas = subs.filter((x) => x.feita).length;
+  const pct = subs.length ? Math.round((feitas / subs.length) * 100) : 0;
+  $('#tfp-corpo').innerHTML = `
+    <p class="dica">${[NOME_ETAPA[t.etapa], rotuloDia(t.dia), t.prazo ? rotuloPrazo(t.prazo).texto : '', t.recorrencia ? `repete ${NOME_REPETE[t.recorrencia]}` : '', t.projeto ? `projeto ${esc(t.projeto)}` : '', t.area ? esc(t.area) : '', t.empresa ? esc(t.empresa) : ''].filter(Boolean).join(' · ')}</p>
+    ${t.notas ? `<p class="tfp-notas">${leve(t.notas)}</p>` : ''}
+    <h3 class="tfp-sec">Subtarefas ${subs.length ? `<small>${feitas}/${subs.length}</small>` : ''}</h3>
+    ${subs.length ? `<div class="tf-barra fina"><span style="width:${pct}%"></span></div>` : ''}
+    <ul class="tfp-subs">${subs.map((x) => `<li class="${x.feita ? 'feita' : ''}">
+      <button class="tfp-check" data-tfs-feita="${esc(x.id)}" data-v="${x.feita ? '0' : '1'}" aria-label="${x.feita ? 'Desmarcar' : 'Marcar como feita'}"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg></button>
+      <span>${esc(x.titulo)}</span>
+      <button class="tfp-del" data-tfs-apagar="${esc(x.id)}" aria-label="Apagar subtarefa">×</button></li>`).join('')}</ul>
+    <form id="tfs-nova" class="tfp-form"><input name="titulo" maxlength="200" placeholder="Nova subtarefa…" autocomplete="off" aria-label="Nova subtarefa"><button class="btn primario">Adicionar</button></form>
+    <h3 class="tfp-sec">Anotações e histórico</h3>
+    <form id="tfs-nota" class="tfp-form"><input name="texto" maxlength="1000" placeholder="Escreva uma anotação…" autocomplete="off" aria-label="Nova anotação"><button class="btn claro">Anotar</button></form>
+    <ol class="tfp-hist">${hist.map((h) => `<li class="${h.acao === 'nota' ? 'nota' : ''}"><b>${NOME_ACAO_HIST[h.acao] || esc(h.acao)}</b>${h.detalhe ? ` <span>${esc(h.detalhe)}</span>` : ''}<small>${quando(h.created_at)}${POR_HIST[h.por] ? ` · ${POR_HIST[h.por]}` : ''}</small></li>`).join('') || '<li class="dica">Sem registros ainda.</li>'}</ol>`;
+}
+async function desenharProjetos() {
+  const { projetos } = await api('/tarefas/projetos');
+  $('#tfp-corpo').innerHTML = projetos.length
+    ? `<p class="dica">Toque num projeto para ver as tarefas abertas dele (de todos os dias).</p><ul class="tfp-proj">${projetos.map((p) => `<li><button data-tfp-projeto="${esc(p.projeto)}"><b>${esc(p.projeto)}</b><small>${p.abertas} aberta${p.abertas === 1 ? '' : 's'} · ${p.feitas} feita${p.feitas === 1 ? '' : 's'}${p.vencidas ? ` · <em>${p.vencidas} com prazo vencido</em>` : ''}${p.areas.length ? ` · ${p.areas.map(esc).join(', ')}` : ''}</small></button></li>`).join('')}</ul>`
+    : '<p class="dica centro">Nenhum projeto ainda. Ao editar uma tarefa, preencha o campo “Projeto” para agrupá-la aqui.</p>';
+}
+async function desenharTarefasDoProjeto(projeto) {
+  $('#tfp-titulo').textContent = projeto;
+  const { tarefas } = await api(`/tarefas/buscar?projeto=${encodeURIComponent(projeto)}`);
+  $('#tfp-corpo').innerHTML = `<button class="link" data-tf-painel="projetos">‹ Todos os projetos</button>
+    <ul class="tfp-proj">${tarefas.map((t) => `<li><button data-tfp-ir-dia="${esc(t.dia)}"><b>${esc(t.titulo)}</b><small>${NOME_ETAPA[t.etapa]} · ${rotuloDia(t.dia)}${t.prazo ? ` · ${rotuloPrazo(t.prazo).texto}` : ''}</small></button></li>`).join('') || '<li class="dica">Nenhuma tarefa aberta neste projeto.</li>'}</ul>`;
+}
+async function desenharLixeira() {
+  const { tarefas } = await api('/tarefas/lixeira');
+  $('#tfp-corpo').innerHTML = tarefas.length
+    ? `<p class="dica">Tarefas removidas nos últimos 60 dias. Restaure ou exclua de vez.</p><ul class="tfp-lixo">${tarefas.map((t) => `<li><div><b>${esc(t.titulo)}</b><small>${rotuloDia(t.dia)}${t.projeto ? ` · ${esc(t.projeto)}` : ''} · removida ${ha(t.arquivada_em || t.updated_at)}</small></div>
+      <button class="btn claro" data-tfp-restaurar="${esc(t.id)}">Restaurar</button><button class="link perigo" data-tfp-excluir="${esc(t.id)}">Excluir de vez</button></li>`).join('')}</ul>`
+    : '<p class="dica centro">A lixeira está vazia.</p>';
+}
+async function desenharSugestoes() {
+  const { sugestoes } = await api('/tarefas/sugestoes');
+  $('#tfp-corpo').innerHTML = sugestoes.length
+    ? `<p class="dica">O Dimy só sugere quando há ação concreta, compromisso ou prazo, e a tarefa ainda não existe. Nada vira tarefa sem o seu “Aceitar”.</p>
+      <ul class="tfp-sug">${sugestoes.map((s) => `<li>
+        <span class="tfp-origem ${s.origem}">${s.origem === 'olho' ? '👁 Olho de Deus' : '💬 Das suas conversas'}</span>
+        <b>${esc(s.titulo)}</b>
+        ${s.motivo ? `<p>${esc(s.motivo)}</p>` : ''}
+        ${s.notas ? `<p class="dica">${esc(s.notas)}</p>` : ''}
+        <small>${[s.prazo ? rotuloPrazo(s.prazo).texto : '', s.projeto, s.empresa, ha(s.created_at)].filter(Boolean).map(esc).join(' · ')}</small>
+        <div class="tfp-sug-acoes"><button class="btn primario" data-tfp-aceitar="${esc(s.id)}">Aceitar</button><button class="btn claro" data-tfp-descartar="${esc(s.id)}">Descartar</button></div>
+      </li>`).join('')}</ul>`
+    : '<p class="dica centro">Nenhuma sugestão pendente.</p>';
+}
+async function abrirPainelTarefas(modo) {
+  TFP.modo = modo;
+  abrirPainelTf({ projetos: 'Projetos', lixeira: 'Lixeira', sugestoes: 'Sugestões do Dimy' }[modo]);
+  if (modo === 'projetos') await desenharProjetos();
+  if (modo === 'lixeira') await desenharLixeira();
+  if (modo === 'sugestoes') await desenharSugestoes();
+}
+$('#v-tarefas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tf-painel]'); if (!b) return;
+  abrirPainelTarefas(b.dataset.tfPainel).catch((x) => { $('#tfp-corpo').innerHTML = `<p class="dica centro">${esc(x.message)}</p>`; });
+});
+$('#tf-painel').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-tfp-fechar]')) { fecharPainelTf(); return; }
+  const el = e.target.closest('[data-tf-painel],[data-tfp-projeto],[data-tfp-ir-dia],[data-tfp-restaurar],[data-tfp-excluir],[data-tfp-aceitar],[data-tfp-descartar],[data-tfs-feita],[data-tfs-apagar]');
+  if (!el) return;
+  const d = el.dataset;
+  try {
+    el.disabled = true;
+    if (d.tfPainel) { await abrirPainelTarefas(d.tfPainel); return; }
+    if (d.tfpProjeto) { await desenharTarefasDoProjeto(d.tfpProjeto); return; }
+    if (d.tfpIrDia) { fecharPainelTf(); await carregarTarefas(d.tfpIrDia); return; }
+    if (d.tfpRestaurar) { await api(`/tarefas/${d.tfpRestaurar}/restaurar`, { metodo: 'POST' }); aviso('Tarefa restaurada.'); await desenharLixeira(); carregarTarefas().catch(() => {}); return; }
+    if (d.tfpExcluir) {
+      if (!confirm('Excluir esta tarefa de vez? Não dá para desfazer.')) { el.disabled = false; return; }
+      await api(`/tarefas/${d.tfpExcluir}/excluir`, { metodo: 'POST', corpo: { confirmar: true } }); aviso('Excluída.'); await desenharLixeira(); return;
+    }
+    if (d.tfpAceitar) { const r = await api(`/tarefas/sugestoes/${d.tfpAceitar}/aceitar`, { metodo: 'POST' }); aviso(`Tarefa criada para ${rotuloDia(r.tarefa.dia).toLowerCase()}.`); await desenharSugestoes(); carregarTarefas().catch(() => {}); return; }
+    if (d.tfpDescartar) { await api(`/tarefas/sugestoes/${d.tfpDescartar}/descartar`, { metodo: 'POST' }); await desenharSugestoes(); carregarTarefas().catch(() => {}); return; }
+    if (d.tfsFeita) { await api(`/tarefas/${TFP.id}/subtarefas/${d.tfsFeita}`, { metodo: 'POST', corpo: { feita: d.v === '1' } }); await desenharDetalheTarefa(); carregarTarefas().catch(() => {}); return; }
+    if (d.tfsApagar) { await api(`/tarefas/${TFP.id}/subtarefas/${d.tfsApagar}/apagar`, { metodo: 'POST' }); await desenharDetalheTarefa(); carregarTarefas().catch(() => {}); }
+  } catch (err) { el.disabled = false; aviso(err.message); }
+});
+$('#tf-painel').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target, v = (new FormData(f).get(f.id === 'tfs-nova' ? 'titulo' : 'texto') || '').trim();
+  if (!v) return;
+  try {
+    if (f.id === 'tfs-nova') await api(`/tarefas/${TFP.id}/subtarefas`, { metodo: 'POST', corpo: { titulo: v } });
+    if (f.id === 'tfs-nota') await api(`/tarefas/${TFP.id}/nota`, { metodo: 'POST', corpo: { texto: v } });
+    await desenharDetalheTarefa();
+    $(`#${f.id} input`)?.focus();
+    carregarTarefas().catch(() => {});
+  } catch (err) { aviso(err.message); }
+});
+
+// ---------------------------------------------------------------------------
+// Olho de Deus: inteligência de mercado (concorrentes, similares, regulação, alertas)
+// Tudo vem do servidor; não há dado de demonstração. Coleta programada, não "tempo real".
+// ---------------------------------------------------------------------------
+const Olho = { aba: 'visao', cfg: null, admin: false, empresas: [], resumoEm: 0, fEmp: { categoria: '', segmento: '', q: '' }, fMov: { relevancia: '', filtro: '', dias: '30', segmento: '', categoria: '' }, fAl: { nivel: '', nao_lidos: '1' } };
+const ABAS_OLHO = ['visao', 'alertas', 'empresas', 'movimentos', 'historico', 'ajustes'];
+const NIVEL_OLHO = { critico: 'Crítico', alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
+const CAT_OLHO = { concorrente: 'Concorrente', similar: 'Similar', candidata: 'Em análise', descartada: 'Descartada' };
+const TIPO_MOV = { produto: 'Produto', preco_taxa: 'Preço/taxa', parceria: 'Parceria', expansao: 'Expansão', campanha: 'Campanha', estrategia: 'Estratégia', infraestrutura: 'Infraestrutura', regulatorio: 'Regulação', mercado: 'Mercado', oportunidade: 'Oportunidade' };
+const TIPO_EXEC = { empresa: 'Empresa', setor: 'Setor', regulatorio: 'Regulação', descoberta: 'Novas empresas' };
+const PASSO_EXEC = { inicio: 'na fila', pesquisar: 'pesquisando', extrair: 'estruturando', analisar: 'analisando', gravar: 'gravando', fim: 'concluída' };
+const CAMPOS_OLHO = [['identificacao', 'Identificação'], ['site_redes', 'Site e redes'], ['produtos', 'Produtos e serviços'], ['diferenciais', 'Diferenciais'], ['publico_alvo', 'Público-alvo'],
+  ['infraestrutura', 'Infraestrutura e tecnologia'], ['parceiros', 'Parceiros e instituições'], ['taxas_condicoes', 'Taxas e condições'], ['lancamentos', 'Lançamentos'], ['mudancas_estrategicas', 'Mudanças estratégicas'],
+  ['campanhas', 'Campanhas'], ['expansao', 'Expansão comercial'], ['parcerias_anunciadas', 'Parcerias anunciadas'], ['regulatorio', 'Regulatório/operacional']];
+const urlSegura = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '');
+const hostDe = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch { return ''; } };
+const dataBR = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00-03:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '') : '');
+const valorPerfil = (v) => (Array.isArray(v) ? v.filter(Boolean).map((x) => `<li>${/^https?:\/\//.test(x) ? `<a href="${esc(x)}" target="_blank" rel="noopener">${esc(hostDe(x) || x)}</a>` : esc(x)}</li>`).join('') : esc(v ?? ''));
+
+async function olhoResumo() {
+  if (Date.now() - Olho.resumoEm < 5 * 60e3) return;
+  const p = await api('/olho/painel');
+  Olho.resumoEm = Date.now(); Olho.painel = p;
+  const k = p.kpis, a = k.alertas, n = a.critico + a.alto + a.medio + a.baixo;
+  const total = k.concorrentes + k.similares + k.candidatas;
+  $('#olho-entrada-sub').textContent = total
+    ? `${k.concorrentes} concorrente${k.concorrentes === 1 ? '' : 's'} · ${k.similares} similar${k.similares === 1 ? '' : 'es'} · ${k.movimentos_30d} movimento${k.movimentos_30d === 1 ? '' : 's'} em 30 dias`
+    : (p.status.em_andamento ? 'Primeira coleta em andamento…' : 'Inteligência de mercado · concorrentes, regulação, oportunidades');
+  const b = $('#olho-entrada-alertas');
+  b.hidden = !n; b.textContent = n; b.className = `olho-entrada-n ${a.critico ? 'critico' : a.alto ? 'alto' : 'medio'}`;
+}
+
+async function carregarOlho() {
+  const [, a, b] = location.hash.slice(1).split('/');
+  const sub = a === 'empresa' || a === 'movimento';
+  $('#olho-abas').hidden = sub;
+  $('#olho-voltar').dataset.ir = sub ? `olho/${Olho.aba}` : 'hoje';
+  if (sub && b) { $('#olho-corpo').innerHTML = '<p class="dica centro">Carregando…</p>'; return a === 'empresa' ? olhoEmpresa(b) : olhoMovimento(b); }
+  Olho.aba = ABAS_OLHO.includes(a) ? a : Olho.aba;
+  document.querySelectorAll('[data-olho-aba]').forEach((x) => x.classList.toggle('on', x.dataset.olhoAba === Olho.aba));
+  $('#olho-titulo').textContent = 'Olho de Deus';
+  $('#olho-subtitulo').textContent = 'Inteligência de mercado da B2B PAY';
+  if (!Olho.cfg) { const c = await api('/olho/config'); Olho.cfg = c.config; Olho.admin = c.admin; }
+  const r = { visao: olhoVisao, alertas: olhoAlertas, empresas: olhoEmpresas, movimentos: olhoMovimentos, historico: olhoHistorico, ajustes: olhoAjustes }[Olho.aba];
+  await r();
+}
+function cartaoMovOlho(m) {
+  return `<button class="olho-mov n-${m.relevancia}" data-olho-mov="${esc(m.id)}">
+    <span class="olho-dot n-${m.relevancia}" title="${NIVEL_OLHO[m.relevancia]}"></span>
+    <span class="olho-mov-t"><b>${esc(m.titulo)}</b><small>${[m.empresa || 'Mercado', TIPO_MOV[m.tipo] || m.tipo, m.data_evento ? dataBR(m.data_evento) : `detectado ${ha(m.created_at)}`, m.fonte || hostDe(m.url)].filter(Boolean).map(esc).join(' · ')}</small></span>
+    ${m.ameaca ? '<i class="olho-flag ameaca">ameaça</i>' : ''}${m.oportunidade ? '<i class="olho-flag oport">oportunidade</i>' : ''}
+  </button>`;
+}
+function cartaoAlertaOlho(a) {
+  const u = urlSegura(a.url);
+  return `<article class="olho-alerta n-${a.nivel} ${a.lido_em ? 'lido' : ''}">
+    <header><span class="olho-nivel n-${a.nivel}">${NIVEL_OLHO[a.nivel]}</span><small>${a.quando ? `${dataBR(a.quando)} · ` : ''}detectado ${ha(a.created_at)}</small></header>
+    <h3>${esc(a.titulo)}</h3>
+    <p class="olho-alerta-emp">${esc(a.empresa || 'Mercado')}${u ? ` · <a href="${esc(u)}" target="_blank" rel="noopener">${esc(a.fonte || hostDe(u))}</a>` : ''}</p>
+    <dl>${a.porque ? `<dt>Por que importa</dt><dd>${esc(a.porque)}</dd>` : ''}${a.impacto ? `<dt>Impacto</dt><dd>${esc(a.impacto)}</dd>` : ''}${a.acao ? `<dt>Ação recomendada</dt><dd>${esc(a.acao)}</dd>` : ''}</dl>
+    <div class="olho-acoes"><button class="btn claro" data-olho-mov="${esc(a.movimento_id)}">Análise completa</button><button class="btn claro" data-olho-tarefa="${esc(a.movimento_id)}">Criar tarefa</button>${a.lido_em ? '' : `<button class="link" data-olho-lido="${esc(a.id)}">Marcar como lido</button>`}</div>
+  </article>`;
+}
+const linhaExec = (x) => `<li class="olho-exec ${x.status}"><span class="olho-exec-st">${{ fila: 'Na fila', rodando: PASSO_EXEC[x.passo] || 'rodando', ok: 'Concluída', erro: 'Falhou', pulada: 'Pulada' }[x.status]}</span>
+  <b>${TIPO_EXEC[x.tipo]}${x.empresa ? `: ${esc(x.empresa)}` : ''}</b>
+  <small>${[ha(x.created_at), x.fontes ? `${x.fontes} fontes` : '', x.status === 'ok' ? `${x.novidades} novidade${x.novidades === 1 ? '' : 's'}` : '', x.resumo && x.status === 'ok' ? x.resumo : ''].filter(Boolean).map(esc).join(' · ')}</small>
+  ${x.erro && x.status !== 'ok' ? `<small class="olho-erro">${esc(x.erro)}</small>` : ''}</li>`;
+
+async function olhoVisao() {
+  const p = await api('/olho/painel'); Olho.painel = p; Olho.resumoEm = Date.now();
+  const s = p.status, k = p.kpis, n = k.alertas;
+  const andamento = p.execucoes.filter((x) => ['fila', 'rodando'].includes(x.status));
+  const nAl = n.critico + n.alto + n.medio + n.baixo;
+  const kpi = (rot, val, ir, cls = '') => `<button class="olho-kpi ${cls}" data-olho-ir="${ir}"><b>${val}</b><small>${rot}</small></button>`;
+  const vazio = !k.concorrentes && !k.similares && !k.candidatas && !k.movimentos_30d;
+  $('#olho-n-alertas').textContent = nAl || '';
+  $('#olho-corpo').innerHTML = `
+    <section class="olho-hero ${s.ativo ? '' : 'pausado'}">
+      <div class="olho-radar" aria-hidden="true"><i></i><i></i><i></i><span></span></div>
+      <div class="olho-hero-txt">
+        <p class="olho-hero-t">${s.ativo ? (andamento.length ? 'Pesquisando agora' : 'Monitorando') : 'Monitoramento pausado'}</p>
+        <p class="olho-hero-s">Última coleta concluída ${s.ultima_coleta ? ha(s.ultima_coleta) : ': ainda nenhuma'}${andamento.length ? ` · ${andamento.length} na fila` : ''}</p>
+        <p class="olho-hero-f">Coleta programada, não em tempo real: cada empresa a cada ${s.frequencia.empresas_h} h · setor e regulação 1×/dia (7h–22h) · novas empresas 1×/semana · até ${s.limite_dia} pesquisas/dia.</p>
+      </div>
+    </section>
+    ${vazio ? '<p class="olho-aviso">A primeira coleta real está em andamento. Os números abaixo aparecem conforme as pesquisas terminam (cada uma leva de 4 a 8 minutos). Nada aqui é ilustrativo.</p>' : ''}
+    <div class="olho-kpis">
+      ${kpi('Concorrentes', k.concorrentes, 'empresas:concorrente')}
+      ${kpi('Empresas similares', k.similares, 'empresas:similar')}
+      ${kpi('Em análise', k.candidatas, 'empresas:candidata')}
+      ${kpi('Movimentos 30 dias', k.movimentos_30d, 'movimentos:')}
+      ${kpi('Ameaças', k.ameacas, 'movimentos:ameacas', 'ameaca')}
+      ${kpi('Oportunidades', k.oportunidades, 'movimentos:oportunidades', 'oport')}
+    </div>
+    <div class="olho-niveis" role="list" aria-label="Alertas não lidos por nível">
+      ${['critico', 'alto', 'medio', 'baixo'].map((x) => `<button role="listitem" class="olho-nv n-${x}" data-olho-ir="alertas:${x}"><b>${n[x]}</b>${NIVEL_OLHO[x]}</button>`).join('')}
+    </div>
+    ${p.alertas.length ? `<h2 class="secao">Alertas não lidos</h2>${p.alertas.slice(0, 4).map(cartaoAlertaOlho).join('')}${p.alertas.length > 4 ? '<button class="btn claro largo" data-olho-ir="alertas:">Ver todos os alertas</button>' : ''}` : ''}
+    ${p.ameacas.length ? `<h2 class="secao">Ameaças</h2><div class="olho-movs">${p.ameacas.map(cartaoMovOlho).join('')}</div>` : ''}
+    ${p.oportunidades.length ? `<h2 class="secao">Oportunidades</h2><div class="olho-movs">${p.oportunidades.map(cartaoMovOlho).join('')}</div>` : ''}
+    <h2 class="secao">Últimas movimentações</h2>
+    ${p.movimentos.length ? `<div class="olho-movs">${p.movimentos.slice(0, 12).map(cartaoMovOlho).join('')}</div>` : '<p class="dica">Ainda nenhuma movimentação registrada.</p>'}
+    ${k.sugestoes ? `<button class="btn claro largo" data-ir="tarefas">✨ ${k.sugestoes} sugest${k.sugestoes > 1 ? 'ões' : 'ão'} de tarefa do Olho em Tarefas</button>` : ''}
+    <h2 class="secao">Pesquisas recentes</h2>
+    <ul class="olho-execs">${p.execucoes.slice(0, 6).map(linhaExec).join('') || '<li class="dica">Nenhuma ainda.</li>'}</ul>
+    ${Olho.admin ? '<button class="btn claro largo" data-olho-descobrir>Buscar novas empresas agora</button>' : ''}`;
+}
+
+async function olhoAlertas() {
+  const f = Olho.fAl;
+  const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v)).toString();
+  const { alertas } = await api(`/olho/alertas${q ? `?${q}` : ''}`);
+  const chip = (campo, v, rot) => `<button class="olho-chip ${f[campo] === v ? 'on' : ''}" data-olho-f="fAl.${campo}" data-v="${v}">${rot}</button>`;
+  $('#olho-corpo').innerHTML = `
+    <div class="olho-filtros">${chip('nao_lidos', '1', 'Não lidos')}${chip('nao_lidos', '', 'Todos')}<span class="sep"></span>${chip('nivel', '', 'Qualquer nível')}${chip('nivel', 'medio', 'Médio+')}${chip('nivel', 'alto', 'Alto+')}${chip('nivel', 'critico', 'Crítico')}</div>
+    ${alertas.some((a) => !a.lido_em) ? '<button class="link" data-olho-todos-lidos>Marcar todos como lidos</button>' : ''}
+    ${alertas.map(cartaoAlertaOlho).join('') || '<p class="dica centro">Nenhum alerta com esse filtro. Os alertas são gerados quando uma pesquisa encontra algo novo e relevante; repetidos são descartados.</p>'}`;
+}
+
+async function olhoEmpresas() {
+  const f = Olho.fEmp;
+  const q = new URLSearchParams(Object.entries(f).filter(([, v]) => v)).toString();
+  const { empresas } = await api(`/olho/empresas${q ? `?${q}` : ''}`);
+  Olho.empresas = empresas;
+  const chip = (v, rot) => `<button class="olho-chip ${f.categoria === v ? 'on' : ''}" data-olho-f="fEmp.categoria" data-v="${v}">${rot}</button>`;
+  const segs = Olho.cfg?.segmentos || [];
+  $('#olho-corpo').innerHTML = `
+    <form class="olho-busca" data-olho-busca="fEmp"><input name="q" value="${esc(f.q)}" placeholder="Buscar empresa" autocomplete="off" enterkeyhint="search" aria-label="Buscar empresa">
+      <select name="segmento" aria-label="Segmento"><option value="">Todos os segmentos</option>${segs.map((x) => `<option ${f.segmento === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></form>
+    <div class="olho-filtros">${chip('', 'Ativas')}${chip('concorrente', 'Concorrentes')}${chip('similar', 'Similares')}${chip('candidata', 'Em análise')}${chip('descartada', 'Descartadas')}</div>
+    ${Olho.admin ? '<button class="btn claro largo" data-olho-nova-empresa>+ Acompanhar uma empresa</button>' : ''}
+    <div class="olho-emps">${empresas.map((e) => `<button class="olho-emp" data-olho-emp="${esc(e.id)}">
+      <span class="olho-emp-cab"><b>${esc(e.nome)}</b><span class="olho-cat ${e.categoria}">${CAT_OLHO[e.categoria]}</span>${e.nivel_ameaca ? `<span class="olho-nivel n-${e.nivel_ameaca}" title="Nível de ameaça">${NIVEL_OLHO[e.nivel_ameaca]}</span>` : ''}</span>
+      ${e.resumo ? `<span class="olho-emp-res">${esc(e.resumo)}</span>` : ''}
+      ${(e.classificacoes || []).length ? `<span class="olho-rotulos">${e.classificacoes.slice(0, 3).map((c) => `<i>${esc(c.rotulo)} · ${Math.round(c.confianca * 100)}%</i>`).join('')}</span>` : ''}
+      <small>${e.ultima_em ? `analisada ${ha(e.ultima_em)}` : 'aguardando a primeira análise'}${e.silenciada ? ' · alertas silenciados' : ''}${e.ativo ? '' : ' · monitoramento pausado'}${(e.segmentos || []).length ? ` · ${e.segmentos.slice(0, 3).map(esc).join(', ')}` : ''}</small>
+    </button>`).join('') || '<p class="dica centro">Nenhuma empresa com esse filtro.</p>'}</div>`;
+}
+
+async function olhoEmpresa(id) {
+  const { empresa: e, historico, movimentos, execucoes } = await api(`/olho/empresas/${id}`);
+  $('#olho-titulo').textContent = e.nome;
+  $('#olho-subtitulo').textContent = `${CAT_OLHO[e.categoria]}${e.ultima_em ? ` · analisada ${ha(e.ultima_em)}` : ' · aguardando a primeira análise'}`;
+  const site = urlSegura(e.site);
+  const perfil = e.perfil || {};
+  const preenchidos = CAMPOS_OLHO.filter(([c]) => perfil[c] != null && String(perfil[c]).trim() && !(Array.isArray(perfil[c]) && !perfil[c].length));
+  const abertas = execucoes.filter((x) => ['fila', 'rodando'].includes(x.status));
+  $('#olho-corpo').innerHTML = `
+    <section class="olho-ficha">
+      <div class="olho-emp-cab"><span class="olho-cat ${e.categoria}">${CAT_OLHO[e.categoria]}</span>${e.nivel_ameaca ? `<span class="olho-nivel n-${e.nivel_ameaca}">Ameaça ${NIVEL_OLHO[e.nivel_ameaca].toLowerCase()}</span>` : ''}${site ? `<a href="${esc(site)}" target="_blank" rel="noopener">${esc(hostDe(site))}</a>` : ''}</div>
+      ${e.resumo ? `<p>${esc(e.resumo)}</p>` : ''}
+      ${e.motivo_inclusao ? `<p class="dica"><b>Por que está aqui:</b> ${esc(e.motivo_inclusao)}</p>` : ''}
+      ${abertas.length ? `<p class="olho-aviso">Pesquisa em andamento (${PASSO_EXEC[abertas[0].passo] || 'na fila'}). Atualize em alguns minutos.</p>` : ''}
+      ${Olho.admin ? `<div class="olho-acoes">
+        <button class="btn primario" data-olho-atualizar="${esc(e.id)}" ${abertas.length ? 'disabled' : ''}>Atualizar agora</button>
+        <select data-olho-categoria="${esc(e.id)}" aria-label="Categoria">${Object.entries(CAT_OLHO).map(([k, v]) => `<option value="${k}" ${e.categoria === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn claro" data-olho-alternar="${esc(e.id)}" data-campo="silenciada" data-v="${e.silenciada ? '0' : '1'}">${e.silenciada ? 'Reativar alertas' : 'Silenciar alertas'}</button>
+        <button class="btn claro" data-olho-alternar="${esc(e.id)}" data-campo="ativo" data-v="${e.ativo ? '0' : '1'}">${e.ativo ? 'Pausar monitoramento' : 'Retomar monitoramento'}</button>
+      </div>` : ''}
+    </section>
+    <h2 class="secao">Promessa × comprovação</h2>
+    <p class="dica">Classificação técnica com base em fontes públicas. Não é acusação. ✓ = a URL da evidência apareceu de fato na pesquisa; sem ✓ a confiança é limitada a 30%.</p>
+    ${(e.classificacoes || []).map((c) => `<article class="olho-classe">
+      <header><b>${esc(c.rotulo)}</b><span class="olho-conf"><span style="width:${Math.round(c.confianca * 100)}%"></span></span><small>${Math.round(c.confianca * 100)}%</small></header>
+      ${c.conclusao ? `<p>${esc(c.conclusao)}</p>` : ''}
+      <ul class="olho-evid">${(c.evidencias || []).map((v) => `<li class="${v.verificada ? 'ok' : ''}"><span>${v.verificada ? '✓' : '·'}</span><div>${esc(v.afirmacao)}${urlSegura(v.url) ? ` <a href="${esc(v.url)}" target="_blank" rel="noopener">${esc(v.fonte || hostDe(v.url))}</a>` : ''}</div></li>`).join('')}</ul>
+      ${c.a_investigar ? `<p class="dica"><b>A investigar:</b> ${esc(c.a_investigar)}</p>` : ''}
+    </article>`).join('') || '<p class="dica">Ainda sem classificação: ela sai na primeira análise completa.</p>'}
+    <h2 class="secao">O que acompanhamos (${preenchidos.length} de 14 itens com informação)</h2>
+    <dl class="olho-perfil">${preenchidos.map(([c, rot]) => `<dt>${rot}</dt><dd>${Array.isArray(perfil[c]) ? `<ul>${valorPerfil(perfil[c])}</ul>` : valorPerfil(perfil[c])}</dd>`).join('') || '<dd class="dica">Nada coletado ainda.</dd>'}</dl>
+    <h2 class="secao">Linha do tempo</h2>
+    <div class="olho-movs">${movimentos.map((m) => cartaoMovOlho({ ...m, empresa: e.nome })).join('') || '<p class="dica">Nenhuma movimentação registrada.</p>'}</div>
+    <h2 class="secao">Histórico de mudanças</h2>
+    <ol class="olho-mudancas">${historico.map((h) => `<li><small>${quando(h.created_at)}</small>${(h.mudancas || []).length ? `<ul>${h.mudancas.map((m) => `<li><b>${esc((CAMPOS_OLHO.find(([c]) => c === m.campo) || [, m.campo])[1])}</b> mudou</li>`).join('')}</ul>` : '<span class="dica">Sem mudanças em relação à coleta anterior.</span>'}</li>`).join('') || '<li class="dica">Ainda não há duas coletas para comparar.</li>'}</ol>
+    <h2 class="secao">Pesquisas desta empresa</h2>
+    <ul class="olho-execs">${execucoes.map((x) => linhaExec({ ...x, tipo: 'empresa' })).join('') || '<li class="dica">Nenhuma ainda.</li>'}</ul>`;
+}
+
+async function olhoMovimento(id) {
+  const { movimento: m } = await api(`/olho/movimentos/${id}`);
+  const a = m.analise || {}, u = urlSegura(m.url);
+  $('#olho-titulo').textContent = TIPO_MOV[m.tipo] || 'Movimento';
+  $('#olho-subtitulo').textContent = `${m.empresa || 'Mercado'} · ${m.data_evento ? dataBR(m.data_evento) : `detectado ${ha(m.created_at)}`}`;
+  const bloco = (rot, txt) => (txt ? `<dt>${rot}</dt><dd>${esc(txt)}</dd>` : '');
+  $('#olho-corpo').innerHTML = `
+    <article class="olho-ficha">
+      <div class="olho-emp-cab"><span class="olho-nivel n-${m.relevancia}">${NIVEL_OLHO[m.relevancia]}</span>${m.ameaca ? '<i class="olho-flag ameaca">ameaça</i>' : ''}${m.oportunidade ? '<i class="olho-flag oport">oportunidade</i>' : ''}</div>
+      <h2 class="olho-mov-tit">${esc(m.titulo)}</h2>
+      ${m.resumo ? `<p>${esc(m.resumo)}</p>` : ''}
+      <p class="dica">Fonte: ${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(m.fonte || hostDe(u))}</a>` : esc(m.fonte || '—')} · registrado ${quando(m.created_at)}</p>
+      <div class="olho-acoes"><button class="btn primario" data-olho-tarefa="${esc(m.id)}">Criar tarefa</button>${m.empresa_id ? `<button class="btn claro" data-olho-emp="${esc(m.empresa_id)}">Ver empresa</button>` : ''}</div>
+    </article>
+    <h2 class="secao">Análise estratégica</h2>
+    <dl class="olho-analise">
+      ${bloco('O que significa para a B2B PAY', a.o_que_significa)}${bloco('Comparação com a sua oferta', a.comparacao)}${bloco('Vantagens do outro lado', a.vantagens_concorrente)}
+      ${bloco('Ameaças', a.ameacas)}${bloco('Impacto comercial', a.impacto_comercial)}${bloco('Como se posicionar', a.posicionamento)}${bloco('Como se diferenciar', a.diferenciacao)}
+      ${a.acao_recomendada ? `<dt>Ação recomendada</dt><dd class="olho-acao">${esc(a.acao_recomendada)}</dd>` : ''}
+    </dl>
+    <p class="dica">Análise gerada por IA a partir da fonte citada. Confira a fonte antes de decidir.</p>`;
+}
+
+async function olhoMovimentos() {
+  const f = Olho.fMov;
+  const p = new URLSearchParams();
+  if (f.relevancia) p.set('relevancia', f.relevancia);
+  if (f.filtro) p.set('filtro', f.filtro);
+  if (f.dias) p.set('desde', new Date(Date.now() - Number(f.dias) * 864e5).toISOString());
+  if (f.segmento) p.set('segmento', f.segmento);
+  if (f.categoria) p.set('categoria', f.categoria);
+  const { movimentos } = await api(`/olho/movimentos?${p}`);
+  const chip = (campo, v, rot) => `<button class="olho-chip ${f[campo] === v ? 'on' : ''}" data-olho-f="fMov.${campo}" data-v="${v}">${rot}</button>`;
+  const segs = Olho.cfg?.segmentos || [];
+  $('#olho-corpo').innerHTML = `
+    <div class="olho-filtros">${chip('filtro', '', 'Tudo')}${chip('filtro', 'ameacas', 'Ameaças')}${chip('filtro', 'oportunidades', 'Oportunidades')}<span class="sep"></span>${chip('categoria', '', 'Todas as empresas')}${chip('categoria', 'concorrente', 'Concorrentes')}${chip('categoria', 'similar', 'Similares')}</div>
+    <div class="olho-filtros">${chip('relevancia', '', 'Qualquer relevância')}${chip('relevancia', 'medio', 'Médio+')}${chip('relevancia', 'alto', 'Alto+')}${chip('relevancia', 'critico', 'Crítico')}<span class="sep"></span>${chip('dias', '7', '7 dias')}${chip('dias', '30', '30 dias')}${chip('dias', '90', '90 dias')}${chip('dias', '', 'Tudo')}</div>
+    <form class="olho-busca" data-olho-busca="fMov"><select name="segmento" aria-label="Segmento"><option value="">Todos os segmentos</option>${segs.map((x) => `<option ${f.segmento === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></form>
+    <div class="olho-movs">${movimentos.map(cartaoMovOlho).join('') || '<p class="dica centro">Nada com esses filtros.</p>'}</div>`;
+}
+
+async function olhoHistorico() {
+  const [{ execucoes }, { empresas }] = await Promise.all([api('/olho/execucoes'), Olho.empresas.length ? { empresas: Olho.empresas } : api('/olho/empresas?categoria=')]);
+  const nomes = Object.fromEntries((empresas || []).map((e) => [e.id, e.nome]));
+  const ok = execucoes.filter((x) => x.status === 'ok').length, erro = execucoes.filter((x) => x.status === 'erro').length;
+  $('#olho-corpo').innerHTML = `
+    <p class="dica">Histórico real das pesquisas: cada linha é uma execução no servidor (pesquisa na web → estruturação → análise → gravação). ${ok} concluída${ok === 1 ? '' : 's'}, ${erro} com falha nas últimas ${execucoes.length}.</p>
+    ${Olho.admin ? '<button class="btn claro largo" data-olho-descobrir>Buscar novas empresas agora</button>' : ''}
+    <ul class="olho-execs">${execucoes.map((x) => linhaExec({ ...x, empresa: nomes[x.empresa_id] })).join('') || '<li class="dica">Nenhuma pesquisa ainda.</li>'}</ul>`;
+}
+
+async function olhoAjustes() {
+  const { config: c, admin } = await api('/olho/config'); Olho.cfg = c; Olho.admin = admin;
+  const sel = (nome, v) => `<select name="${nome}" ${admin ? '' : 'disabled'}>${Object.entries(NIVEL_OLHO).map(([k, t]) => `<option value="${k}" ${v === k ? 'selected' : ''}>${t}${k === 'baixo' ? '' : ' ou mais'}</option>`).join('')}</select>`;
+  $('#olho-corpo').innerHTML = `
+    <form id="olho-ajustes" class="olho-ajustes">
+      ${admin ? '' : '<p class="olho-aviso">Só o administrador altera estes ajustes.</p>'}
+      <label class="olho-linha"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''} ${admin ? '' : 'disabled'}><span><b>Monitoramento ligado</b><small>Desligado, nenhuma pesquisa nova é feita.</small></span></label>
+      <label class="campo"><span>Gerar alerta a partir de</span>${sel('nivel_minimo_alerta', c.nivel_minimo_alerta)}</label>
+      <label class="campo"><span>Avisar no celular a partir de</span>${sel('nivel_push', c.nivel_push)}</label>
+      <label class="campo"><span>Assuntos que geram alerta (um por linha; vazio = todos)</span><textarea name="temas_alerta" rows="3" placeholder="split de pagamentos&#10;Pix automático" ${admin ? '' : 'disabled'}>${esc((c.temas_alerta || []).join('\n'))}</textarea></label>
+      <p class="campo-dica">Crítico sempre gera alerta, mesmo fora dos assuntos. Para silenciar uma empresa, abra a página dela.</p>
+      <label class="campo"><span>Segmentos monitorados (um por linha)</span><textarea name="segmentos" rows="5" ${admin ? '' : 'disabled'}>${esc((c.segmentos || []).join('\n'))}</textarea></label>
+      <div class="linha-campos">
+        <label class="campo"><span>Reanalisar cada empresa a cada (horas)</span><input type="number" name="frequencia_empresa_h" min="12" max="720" value="${c.frequencia_empresa_h}" ${admin ? '' : 'disabled'}></label>
+        <label class="campo"><span>Limite de pesquisas por dia</span><input type="number" name="max_execucoes_dia" min="1" max="200" value="${c.max_execucoes_dia}" ${admin ? '' : 'disabled'}></label>
+      </div>
+      <label class="campo"><span>Seu negócio (base de toda comparação)</span><textarea name="meu_negocio" rows="6" ${admin ? '' : 'disabled'}>${esc(c.meu_negocio)}</textarea></label>
+      ${admin ? '<button class="btn primario largo">Salvar ajustes</button>' : ''}
+    </form>`;
+}
+
+$('#olho-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-olho-aba]'); if (b) ir(`olho/${b.dataset.olhoAba}`); });
+$('#v-olho').addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-olho-ir],[data-olho-mov],[data-olho-emp],[data-olho-tarefa],[data-olho-lido],[data-olho-todos-lidos],[data-olho-f],[data-olho-descobrir],[data-olho-atualizar],[data-olho-alternar],[data-olho-nova-empresa]');
+  if (!el || el.tagName === 'SELECT') return;
+  const d = el.dataset;
+  try {
+    if (d.olhoIr) {
+      const [aba, v] = d.olhoIr.split(':');
+      if (aba === 'empresas') Olho.fEmp = { ...Olho.fEmp, categoria: v || '' };
+      if (aba === 'movimentos') Olho.fMov = { ...Olho.fMov, filtro: v || '', dias: '30' };
+      if (aba === 'alertas') Olho.fAl = { nivel: v || '', nao_lidos: '1' };
+      ir(`olho/${aba}`); return;
+    }
+    if (d.olhoMov) { ir(`olho/movimento/${d.olhoMov}`); return; }
+    if (d.olhoEmp) { ir(`olho/empresa/${d.olhoEmp}`); return; }
+    if (d.olhoF) { const [obj, campo] = d.olhoF.split('.'); Olho[obj][campo] = d.v; await carregarOlho(); return; }
+    el.disabled = true;
+    if (d.olhoTarefa) { await api(`/olho/movimentos/${d.olhoTarefa}/tarefa`, { metodo: 'POST' }); aviso('Tarefa criada para hoje, no projeto “Inteligência de mercado”.'); el.textContent = 'Tarefa criada ✓'; return; }
+    if (d.olhoLido) { await api(`/olho/alertas/${d.olhoLido}/lido`, { metodo: 'POST' }); Olho.resumoEm = 0; await carregarOlho(); return; }
+    if (d.olhoTodosLidos !== undefined) { await api('/olho/alertas/lidos', { metodo: 'POST' }); Olho.resumoEm = 0; await carregarOlho(); return; }
+    if (d.olhoDescobrir !== undefined) { const r = await api('/olho/descobrir', { metodo: 'POST' }); aviso(r.mensagem); await carregarOlho(); return; }
+    if (d.olhoAtualizar) { const r = await api(`/olho/empresas/${d.olhoAtualizar}/atualizar`, { metodo: 'POST' }); aviso(r.mensagem); await carregarOlho(); return; }
+    if (d.olhoAlternar) { await api(`/olho/empresas/${d.olhoAlternar}`, { metodo: 'POST', corpo: { [d.campo]: d.v === '1' } }); await carregarOlho(); return; }
+    if (d.olhoNovaEmpresa !== undefined) {
+      el.disabled = false;
+      abrirFolha({
+        titulo: 'Acompanhar empresa', botao: 'Acompanhar',
+        campos: [
+          { rotulo: 'Nome', nome: 'nome', obrigatorio: true, placeholder: 'Ex.: Asaas' },
+          { rotulo: 'Site oficial', nome: 'site', placeholder: 'https://…', tipoInput: 'url' },
+          { tipo: 'escolha', rotulo: 'Categoria', nome: 'categoria', opcoes: [{ texto: 'Deixar a análise decidir', valor: '', marcado: true }, { texto: 'Concorrente', valor: 'concorrente' }, { texto: 'Similar', valor: 'similar' }] },
+        ],
+        salvar: async (f) => { const r = await api('/olho/empresas', { metodo: 'POST', corpo: f }); aviso('Empresa no radar. A primeira análise sai em 4 a 8 minutos.'); ir(`olho/empresa/${r.id}`); },
+      });
+    }
+  } catch (err) { el.disabled = false; aviso(err.message); }
+});
+$('#v-olho').addEventListener('change', async (e) => {
+  const s = e.target;
+  try {
+    if (s.dataset.olhoCategoria) { await api(`/olho/empresas/${s.dataset.olhoCategoria}`, { metodo: 'POST', corpo: { categoria: s.value } }); aviso(`Categoria: ${CAT_OLHO[s.value]}.`); await carregarOlho(); return; }
+    const f = s.closest('[data-olho-busca]');
+    if (f && s.tagName === 'SELECT') { Olho[f.dataset.olhoBusca][s.name] = s.value; await carregarOlho(); }
+  } catch (err) { aviso(err.message); }
+});
+$('#v-olho').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  try {
+    if (f.dataset.olhoBusca) { const v = new FormData(f); Olho[f.dataset.olhoBusca].q = String(v.get('q') || '').trim(); await carregarOlho(); return; }
+    if (f.id === 'olho-ajustes') {
+      const v = new FormData(f), linhas = (k) => String(v.get(k) || '').split('\n').map((x) => x.trim()).filter(Boolean);
+      const corpo = { ativo: !!v.get('ativo'), nivel_minimo_alerta: v.get('nivel_minimo_alerta'), nivel_push: v.get('nivel_push'), temas_alerta: linhas('temas_alerta'), segmentos: linhas('segmentos'), frequencia_empresa_h: Number(v.get('frequencia_empresa_h')), max_execucoes_dia: Number(v.get('max_execucoes_dia')), meu_negocio: String(v.get('meu_negocio') || '') };
+      const r = await api('/olho/config', { metodo: 'POST', corpo }); Olho.cfg = r.config; aviso('Ajustes salvos.'); await carregarOlho();
+    }
   } catch (err) { aviso(err.message); }
 });
