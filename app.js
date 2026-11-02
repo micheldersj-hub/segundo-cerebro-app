@@ -24,7 +24,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v32';
+const VERSAO = 'v33';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -180,11 +180,30 @@ function listaAgora(d) {
     itens.push({ tipo: 'lembrete', rotulo: `Lembrete · ${hora(l.due_at)}`, texto: l.text });
   }
   for (const a of d.avisos.filter((x) => !x.read_at && x.kind !== 'urgente' && Date.now() - Date.parse(x.created_at) < 24 * 3600e3).slice(0, 4)) {
-    itens.push({ tipo: 'aviso', rotulo: a.title.replace(/^\p{Extended_Pictographic}\s*/u, ''), texto: a.body, acao: a.data?.url && a.data.url.startsWith('./#') ? 'Abrir' : 'Ver', ir: a.data?.url?.startsWith('./#') ? a.data.url.slice(3) : 'mais' });
+    itens.push({ tipo: 'aviso', rotulo: textoAviso(a.title).replace(/^\p{Extended_Pictographic}\s*/u, ''), texto: textoAviso(a.body), acao: 'Abrir', ir: destinoAviso(a, d.aguardando) });
   }
   if (!itens.length) itens.push({ tipo: 'calmo', rotulo: 'Agora', texto: 'Nada pedindo você agora. Se quiser, me conta como está o dia.', acao: 'Conversar', ir: 'conversa' });
   return itens;
 }
+
+// Para onde um aviso leva. Avisos antigos de "conversas novas" apontavam para a própria tela Hoje.
+function destinoAviso(a, aguardando = []) {
+  const url = a.data?.url || '';
+  if (a.data?.contact) return `contato/${a.data.contact}`;
+  if (url.startsWith('./#') && url !== './#hoje') return url.slice(3);
+  if (a.kind === 'contatos') {
+    const nomes = [...String(a.body || '').matchAll(/^•\s*(.+?)(?: \(espera resposta\))?:/gm)].map((m) => m[1].trim().toLowerCase());
+    if (nomes.length === 1) {
+      const c = (aguardando || []).find((x) => (x.name || '').trim().toLowerCase() === nomes[0] || `+${x.wa_id}` === nomes[0]);
+      if (c) return `contato/${c.wa_id}`;
+      if (/^\+\d+$/.test(nomes[0])) return `contato/${nomes[0].slice(1)}`;
+    }
+    return 'whats';
+  }
+  return url.startsWith('./#') ? url.slice(3) : 'avisos';
+}
+const TIPOS_MSG = { unsupported: 'mandou figurinha, reação ou outro tipo de mensagem', image: 'mandou uma foto', audio: 'mandou um áudio', video: 'mandou um vídeo', document: 'mandou um documento', sticker: 'mandou uma figurinha', location: 'mandou uma localização' };
+const textoAviso = (t) => String(t || '').replace(/\[(\w+)\]/g, (m, k) => TIPOS_MSG[k.toLowerCase()] || m).replace(/(\d+) conversa\(s\) nova\(s\)/, (m, n) => (n === '1' ? '1 conversa nova' : `${n} conversas novas`));
 const ModoAgora = { blocos: guardadoCedo('cerebro-agora') === 'blocos', itens: [] };
 function guardadoCedo(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function desenharAgora(itens) {
@@ -995,7 +1014,7 @@ const instalado = () => matchMedia('(display-mode: standalone)').matches || navi
 async function carregarMais() {
   const [{ avisos }, st] = await Promise.all([api('/avisos'), api('/status')]);
   $('#lista-avisos').innerHTML = avisos.length
-    ? avisos.map((a) => `<li class="${a.read_at ? '' : 'novo'}"><p class="t">${esc(a.title)}</p><p class="d">${leve(a.body)}</p><p class="h">${quando(a.created_at)}</p></li>`).join('')
+    ? avisos.map((a) => `<li class="${a.read_at ? '' : 'novo'}" data-ir="${esc(destinoAviso(a))}"><p class="t">${esc(textoAviso(a.title))}</p><p class="d">${leve(textoAviso(a.body))}</p><p class="h">${quando(a.created_at)}</p></li>`).join('')
     : '<li><p class="vazio">Aqui chegam o plano da manhã, o resumo da noite, lembretes e urgências.</p></li>';
   if (avisos.some((a) => !a.read_at)) api('/avisos/lidas', { metodo: 'POST' }).then(() => ($('#badge-avisos').hidden = true)).catch(() => {});
 
