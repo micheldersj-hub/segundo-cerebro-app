@@ -24,7 +24,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v30';
+const VERSAO = 'v31';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -902,16 +902,20 @@ document.addEventListener('click', async (e) => {
 const podeEnviar = () => !!contatoInfo?.last_in_at && Date.now() - Date.parse(contatoInfo.last_in_at) < 24 * 3600e3;
 function linkWhats() {
   $('#b-abrir').href = `https://wa.me/${contatoAtual}?text=${encodeURIComponent($('#resposta').value)}`;
-  const tem = !!$('#resposta').value.trim();
-  $('#b-enviar-wa').hidden = !(tem && podeEnviar());
-  $('#b-abrir').hidden = tem && podeEnviar();
+  const tem = !!$('#resposta').value.trim(), direto = podeEnviar();
+  // Dentro das 24 h o app envia direto; fora delas o WhatsApp só aceita pelo próprio app (sem modelo aprovado).
+  $('#b-enviar-wa').hidden = !direto;
+  $('#b-enviar-wa').disabled = !tem;
+  $('#b-abrir').hidden = direto;
+  $('#b-abrir').classList.toggle('desativado', !tem);
+  $('#dica-24h').hidden = direto || !tem;
 }
 $('#b-enviar-wa').addEventListener('click', async (e) => {
   const texto = $('#resposta').value.trim(); if (!texto) return;
   const b = e.currentTarget; b.disabled = true; b.textContent = 'Enviando…';
   try { const { ok } = await api(`/contatos/${contatoAtual}/responder`, { metodo: 'POST', corpo: { texto } }); aviso(ok || 'Enviado.'); await carregarContato(contatoAtual); }
   catch (err) { aviso(err.message); }
-  finally { b.disabled = false; b.textContent = 'Enviar'; }
+  finally { b.textContent = 'Enviar'; b.disabled = false; linkWhats(); }
 });
 $('#resposta').addEventListener('input', linkWhats);
 
@@ -921,7 +925,8 @@ $('#b-sugerir').addEventListener('click', async (e) => {
   catch (err) { aviso(err.message); }
   finally { b.disabled = false; b.textContent = 'Dimy, responda'; }
 });
-$('#b-abrir').addEventListener('click', () => {
+$('#b-abrir').addEventListener('click', (e) => {
+  if (!$('#resposta').value.trim()) { e.preventDefault(); aviso('Escreva a resposta ou toque em "Dimy, responda".'); return; }
   // Ao abrir o WhatsApp para responder, tira da lista de espera (o eco da mensagem confirma depois).
   api(`/contatos/${contatoAtual}/resolvido`, { metodo: 'POST' }).catch(() => {});
 });
