@@ -23,7 +23,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v26';
+const VERSAO = 'v27';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -2749,4 +2749,11 @@ $('#voz').addEventListener('click', (e) => {
   const irPara = e.target.closest('[data-voz-ir]');
   if (irPara) { const d = irPara.dataset.vozIr; fecharVoz(); ir(d); }
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden && Voz.estado === 'ouvindo') pararEscuta(false); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && Voz.estado === 'ouvindo') pararEscuta(false);
+  // Voltou ao app com um comando "pensando" há muito tempo (o iPhone corta a conexão em segundo plano): libera o botão.
+  if (!document.hidden && Voz.estado === 'pensando' && Date.now() - (Voz.desde || 0) > 90000) {
+    diag('voz-preso', `${Math.round((Date.now() - Voz.desde) / 1000)}s`);
+    vozUI('parado', 'A resposta não chegou (o app ficou em segundo plano). Toque e fale de novo.');
+  }
+});
