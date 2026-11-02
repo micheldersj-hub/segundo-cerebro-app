@@ -8,6 +8,7 @@ const EXTRA = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/extra';
 const DOCUMENTO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/documento';
 const AGENDADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/agendador';
 const ATENDENTE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/atendente';
+const TAREFAS = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/tarefas';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -24,7 +25,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v33';
+const VERSAO = 'v34';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -70,7 +71,8 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  if (base === TAREFAS) caminho = caminho.replace(/^\/tarefas/, '');
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -117,7 +119,7 @@ function ha(iso) {
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar',
+  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar',
 };
 const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje' };
 
@@ -136,6 +138,7 @@ async function rota() {
   try {
     if (vista === 'hoje') await carregarHoje();
     if (vista === 'conversa') await carregarConversa();
+    if (vista === 'tarefas') await carregarTarefas();
     if (vista === 'whats') await carregarContatos();
     if (vista === 'contato') await carregarContato(arg);
     if (vista === 'mais') await carregarMais();
@@ -289,6 +292,7 @@ function gradeDoMes(mes) {
 const mesSeguinte = (mes, n) => { const [a, m] = mes.split('-').map(Number); const d = new Date(Date.UTC(a, m - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 
 async function carregarHoje() {
+  api('/tarefas').then((d) => { const n = d.tarefas.filter((t) => t.etapa !== 'feito').length + d.atrasadas.length; $('#badge-tarefas').hidden = !n; $('#badge-tarefas').textContent = n; }).catch(() => {});
   $('#hoje-saudacao').textContent = saudacao();
   const hoje = diaISO(new Date());
   $('#hoje-data').textContent = nomeDia(hoje, { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^./, (c) => c.toUpperCase());
@@ -433,7 +437,7 @@ document.addEventListener('click', async (e) => {
   if (ac) {
     if (ac.dataset.acao === 'evento') editarEvento(null);
     if (ac.dataset.acao === 'lembrete') editarLembrete(null);
-    if (ac.dataset.acao === 'dimy') { ir('conversa'); setTimeout(() => !Dimy.ligado && ligarDimy(), 300); }
+    if (ac.dataset.acao === 'dimy') ir('conversa');
   }
 });
 function mudarMes(n) {
@@ -2873,4 +2877,146 @@ document.addEventListener('visibilitychange', () => {
     diag('voz-preso', `${Math.round((Date.now() - Voz.desde) / 1000)}s`);
     vozUI('parado', 'A resposta não chegou (o app ficou em segundo plano). Toque e fale de novo.');
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// Tarefas: funil do dia (A fazer → Fazendo → Feito), adiar para o próximo dia útil
+// ---------------------------------------------------------------------------
+const TF = { dia: null, dados: null, prioridade: 2 };
+const ETAPAS_TF = [
+  { id: 'a_fazer', nome: 'A fazer', cor: 'azul', vazio: 'Nada para começar. Escreva acima o que precisa sair hoje.' },
+  { id: 'fazendo', nome: 'Fazendo', cor: 'ambar', vazio: 'Toque em ▶ numa tarefa para começar.' },
+  { id: 'feito', nome: 'Feito', cor: 'verde', vazio: 'O que você concluir aparece aqui.' },
+];
+const PROXIMA = { a_fazer: 'fazendo', fazendo: 'feito' };
+const proxUtil = (d) => { let n = somaDias(d, 1); while ([0, 6].includes(new Date(`${n}T12:00:00-03:00`).getDay())) n = somaDias(n, 1); return n; };
+function rotuloDia(d) {
+  const hoje = diaISO(new Date());
+  const nome = d === hoje ? 'Hoje' : d === somaDias(hoje, 1) ? 'Amanhã' : d === somaDias(hoje, -1) ? 'Ontem' : nomeDia(d, { weekday: 'long' }).replace(/^./, (c) => c.toUpperCase());
+  return `${nome}, ${nomeDia(d, { day: '2-digit', month: 'short' }).replace('.', '')}`;
+}
+async function carregarTarefas(dia) {
+  TF.dia = dia || TF.dia || diaISO(new Date());
+  desenharTarefas(await api(`/tarefas?dia=${TF.dia}`));
+}
+function cartaoTarefa(t, atrasada = false) {
+  const pri = t.prioridade === 1 ? '<span class="tf-tag alta">Prioridade</span>' : '';
+  const adi = t.adiada_vezes ? `<span class="tf-tag">adiada ${t.adiada_vezes}×</span>` : '';
+  const atr = atrasada ? `<span class="tf-tag atr">de ${nomeDia(t.dia, { day: '2-digit', month: 'short' }).replace('.', '')}</span>` : '';
+  const feito = t.etapa === 'feito';
+  return `<li class="tf-card ${feito ? 'feito' : ''} ${t.prioridade === 1 ? 'p1' : ''}" data-tf="${esc(t.id)}">
+    <button class="tf-check" data-tf-acao="${feito ? 'reabrir' : 'concluir'}" aria-label="${feito ? 'Reabrir' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9"/></svg></button>
+    <button class="tf-corpo" data-tf-acao="editar"><span class="tf-t">${esc(t.titulo)}</span>${pri || adi || atr || t.notas ? `<span class="tf-meta">${pri}${atr}${adi}${t.notas ? `<span class="tf-nota">${esc(t.notas)}</span>` : ''}</span>` : ''}</button>
+    ${feito ? '' : `<div class="tf-acoes">
+      ${atrasada ? '<button data-tf-acao="hoje" aria-label="Trazer para hoje" title="Trazer para hoje"><svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>'
+        : `<button data-tf-acao="avancar" aria-label="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}" title="${t.etapa === 'a_fazer' ? 'Começar' : 'Concluir'}"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7Z"/></svg></button>`}
+      <button data-tf-acao="adiar" aria-label="Passar para o próximo dia" title="Próximo dia"><svg viewBox="0 0 24 24"><path d="M5 12h12m-5-6 6 6-6 6"/></svg></button>
+    </div>`}
+  </li>`;
+}
+function desenharTarefas(d) {
+  TF.dados = d;
+  const hoje = d.hoje;
+  $('#tf-dia-rotulo').textContent = rotuloDia(d.dia);
+  $('#tf-dia-rotulo').classList.toggle('fora', d.dia !== hoje);
+  // faixa da semana com bolinhas de quantidade
+  const ini = somaDias(d.dia, -3);
+  $('#tf-semana').innerHTML = Array.from({ length: 7 }, (_, i) => {
+    const dd = somaDias(ini, i), c = d.contagem?.[dd];
+    const pend = c ? c.total - c.feitas : 0;
+    return `<button class="tf-sd ${dd === d.dia ? 'on' : ''} ${dd === hoje ? 'hoje' : ''}" data-tf-ir="${dd}"><small>${nomeDia(dd, { weekday: 'short' }).replace('.', '').slice(0, 3)}</small><b>${dd.slice(8)}</b><i class="${c ? (pend ? 'pend' : 'ok') : ''}"></i></button>`;
+  }).join('');
+  const ts = d.tarefas;
+  const feitas = ts.filter((t) => t.etapa === 'feito').length;
+  const pct = ts.length ? Math.round((feitas / ts.length) * 100) : 0;
+  $('#tf-barra').style.width = `${pct}%`;
+  $('#tf-progresso-txt').textContent = ts.length ? `${feitas} de ${ts.length} feitas` : 'Nenhuma tarefa neste dia';
+  // atrasadas (só em hoje)
+  $('#tf-atrasadas').hidden = !d.atrasadas.length;
+  $('#tf-lista-atrasadas').innerHTML = d.atrasadas.map((t) => cartaoTarefa(t, true)).join('');
+  // funil
+  $('#tf-funil').innerHTML = ETAPAS_TF.map((e, i) => {
+    const lista = ts.filter((t) => t.etapa === e.id).sort((x, y) => (x.prioridade - y.prioridade) || (x.ordem - y.ordem));
+    return `<section class="tf-etapa ${e.cor}" style="--i:${i}">
+      <div class="tf-boca"><span>${e.nome}</span><b>${lista.length}</b></div>
+      ${lista.length ? `<ul class="tf-cards">${lista.map((t) => cartaoTarefa(t)).join('')}</ul>` : `<p class="tf-vazio">${e.vazio}</p>`}
+    </section>`;
+  }).join('');
+  const pend = ts.filter((t) => t.etapa !== 'feito').length + (d.dia === hoje ? d.atrasadas.length : 0);
+  const b = $('#tf-adiar-pendentes');
+  b.hidden = !pend || d.dia < hoje;
+  b.textContent = `Passar ${pend} pendente${pend > 1 ? 's' : ''} para ${rotuloDia(proxUtil(d.dia < hoje ? hoje : d.dia)).split(',')[0].toLowerCase()}`;
+  const bt = $('#badge-tarefas');
+  if (d.dia === hoje) { const n = ts.filter((t) => t.etapa !== 'feito').length + d.atrasadas.length; bt.hidden = !n; bt.textContent = n; }
+}
+const tarefaPorId = (id) => [...(TF.dados?.tarefas || []), ...(TF.dados?.atrasadas || [])].find((t) => t.id === id);
+async function mudarTarefa(id, corpo, msg) {
+  await api(`/tarefas/${id}`, { metodo: 'POST', corpo });
+  if (msg) aviso(msg);
+  await carregarTarefas();
+}
+function editarTarefa(t) {
+  abrirFolha({
+    titulo: t ? 'Editar tarefa' : 'Nova tarefa',
+    campos: [
+      { rotulo: 'Tarefa', nome: 'titulo', valor: t?.titulo, obrigatorio: true, placeholder: 'Ligar para o Bruno' },
+      { rotulo: 'Detalhes', nome: 'notas', valor: t?.notas || '', placeholder: 'Opcional' },
+      { rotulo: 'Dia', nome: 'dia', tipoInput: 'date', valor: t?.dia || TF.dia },
+      { tipo: 'escolha', rotulo: 'Prioridade', nome: 'prioridade', opcoes: [{ texto: 'Alta', valor: '1', marcado: t?.prioridade === 1 }, { texto: 'Normal', valor: '2', marcado: !t || t.prioridade === 2 }, { texto: 'Baixa', valor: '3', marcado: t?.prioridade === 3 }] },
+      { tipo: 'escolha', rotulo: 'Etapa', nome: 'etapa', opcoes: ETAPAS_TF.map((e) => ({ texto: e.nome, valor: e.id, marcado: (t?.etapa || 'a_fazer') === e.id })) },
+    ],
+    salvar: async (f) => {
+      const corpo = { titulo: f.titulo, notas: f.notas || '', dia: f.dia || TF.dia, prioridade: Number(f.prioridade || 2), etapa: f.etapa || 'a_fazer' };
+      if (t) await mudarTarefa(t.id, corpo, 'Tarefa atualizada.');
+      else { await api('/tarefas', { metodo: 'POST', corpo }); await carregarTarefas(); }
+    },
+    apagar: t ? async () => { await api(`/tarefas/${t.id}/arquivar`, { metodo: 'POST' }); aviso('Tarefa removida.'); await carregarTarefas(); } : null,
+  });
+}
+$('#tf-nova').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const titulo = $('#tf-titulo').value.trim(); if (!titulo) return;
+  $('#tf-titulo').value = '';
+  try { await api('/tarefas', { metodo: 'POST', corpo: { titulo, dia: TF.dia, prioridade: TF.prioridade } }); TF.prioridade = 2; $('#tf-prioridade').dataset.p = '2'; await carregarTarefas(); }
+  catch (err) { $('#tf-titulo').value = titulo; aviso(err.message); }
+});
+$('#tf-prioridade').addEventListener('click', (e) => {
+  TF.prioridade = TF.prioridade === 1 ? 2 : 1;
+  e.currentTarget.dataset.p = String(TF.prioridade);
+  e.currentTarget.setAttribute('aria-label', TF.prioridade === 1 ? 'Prioridade alta' : 'Prioridade normal');
+  aviso(TF.prioridade === 1 ? 'A próxima tarefa entra como prioridade.' : 'Prioridade normal.');
+});
+$('#v-tarefas').addEventListener('click', async (e) => {
+  const seta = e.target.closest('[data-tf-dia]');
+  if (seta) { carregarTarefas(somaDias(TF.dia, Number(seta.dataset.tfDia))).catch((x) => aviso(x.message)); return; }
+  const sd = e.target.closest('[data-tf-ir]');
+  if (sd) { carregarTarefas(sd.dataset.tfIr).catch((x) => aviso(x.message)); return; }
+  if (e.target.closest('#tf-dia-rotulo')) { carregarTarefas(diaISO(new Date())).catch((x) => aviso(x.message)); return; }
+  const b = e.target.closest('[data-tf-acao]'); if (!b) return;
+  const li = b.closest('[data-tf]'), t = tarefaPorId(li?.dataset.tf); if (!t) return;
+  const acao = b.dataset.tfAcao;
+  if (acao === 'editar') { editarTarefa(t); return; }
+  li.classList.add('mexendo');
+  try {
+    if (acao === 'concluir') await mudarTarefa(t.id, { etapa: 'feito' }, 'Feito! ✅');
+    if (acao === 'reabrir') await mudarTarefa(t.id, { etapa: 'a_fazer' });
+    if (acao === 'avancar') await mudarTarefa(t.id, { etapa: PROXIMA[t.etapa] }, t.etapa === 'fazendo' ? 'Feito! ✅' : null);
+    if (acao === 'hoje') await mudarTarefa(t.id, { dia: TF.dados.hoje }, 'Trouxe para hoje.');
+    if (acao === 'adiar') {
+      const r = await api(`/tarefas/${t.id}/adiar`, { metodo: 'POST' });
+      aviso(`Passei para ${rotuloDia(r.tarefa?.dia || proxUtil(TF.dia)).toLowerCase()}.`);
+      await carregarTarefas();
+    }
+  } catch (err) { li.classList.remove('mexendo'); aviso(err.message); }
+});
+$('#tf-trazer-todas').addEventListener('click', async () => {
+  const lista = TF.dados?.atrasadas || [];
+  try { for (const t of lista) await api(`/tarefas/${t.id}`, { metodo: 'POST', corpo: { dia: TF.dados.hoje } }); aviso('Trouxe tudo para hoje.'); await carregarTarefas(TF.dados.hoje); }
+  catch (err) { aviso(err.message); }
+});
+$('#tf-adiar-pendentes').addEventListener('click', async (e) => {
+  const b = e.currentTarget; b.disabled = true;
+  try { const r = await api('/tarefas/adiar-pendentes', { metodo: 'POST', corpo: { dia: TF.dia } }); aviso(`${r.movidas} tarefa${r.movidas > 1 ? 's' : ''} para ${rotuloDia(r.para).toLowerCase()}.`); await carregarTarefas(); }
+  catch (err) { aviso(err.message); } finally { b.disabled = false; }
 });

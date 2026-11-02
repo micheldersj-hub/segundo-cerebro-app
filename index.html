@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{var t=localStorage.getItem('cerebro-tema');if(t==='claro'||t==='escuro'){document.documentElement.dataset.theme=t==='claro'?'light':'dark';document.documentElement.dataset.tema=t}}catch(e){}</script>
-  <link rel="stylesheet" href="style.css?v=33">
+  <link rel="stylesheet" href="style.css?v=34">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -139,6 +139,31 @@
           <button class="espera-todas" data-ir="whats">Abrir todas as conversas</button>
         </details>
       </section>
+    </section>
+
+    <!-- Tarefas: funil do dia -->
+    <section id="v-tarefas" class="vista" hidden>
+      <header class="topo">
+        <h1>Tarefas</h1>
+        <div class="tf-dias">
+          <button class="tf-seta" data-tf-dia="-1" aria-label="Dia anterior"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+          <button id="tf-dia-rotulo" class="tf-dia-rotulo" aria-label="Voltar para hoje"></button>
+          <button class="tf-seta" data-tf-dia="1" aria-label="Próximo dia"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+        </div>
+        <div id="tf-semana" class="tf-semana"></div>
+      </header>
+      <div class="tf-progresso"><div class="tf-barra"><span id="tf-barra"></span></div><span id="tf-progresso-txt"></span></div>
+      <form id="tf-nova" class="tf-nova" autocomplete="off">
+        <button type="button" id="tf-prioridade" class="tf-pri" data-p="2" aria-label="Prioridade normal">!</button>
+        <input id="tf-titulo" placeholder="Nova tarefa…" enterkeyhint="done" maxlength="300" aria-label="Nova tarefa">
+        <button class="tf-add" aria-label="Adicionar"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </form>
+      <section id="tf-atrasadas" class="tf-atrasadas" hidden>
+        <div class="tf-atr-cab"><b>Ficaram para trás</b><button id="tf-trazer-todas" class="link">Trazer todas para hoje</button></div>
+        <ul id="tf-lista-atrasadas" class="tf-cards"></ul>
+      </section>
+      <div id="tf-funil" class="tf-funil"></div>
+      <button id="tf-adiar-pendentes" class="btn claro largo tf-adiar-todas" hidden></button>
     </section>
 
     <!-- Conversa -->
@@ -442,7 +467,7 @@
 
     <nav class="abas" aria-label="Seções">
       <button data-ir="hoje" class="ativa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 9 9 0 0 0-9-9Zm0 4v5l4 2"/></svg>Hoje</button>
-      <button data-ir="conversa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>Conversa</button>
+      <button data-ir="tarefas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z"/></svg>Tarefas<span id="badge-tarefas" class="badge" hidden></span></button>
       <button id="b-comando-voz" class="aba-voz" aria-label="Falar com o Dimy (toque para falar; segure para falar e solte para enviar)"><span class="voz-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-12 0m6 6v3"/></svg></span></button>
       <button data-ir="gravar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" class="cheio"/></svg>Gravar</button>
       <button data-ir="mais"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8Zm4 11a2 2 0 0 0 4 0"/></svg>Avisos<span id="badge-avisos" class="badge" hidden></span></button>
@@ -484,6 +509,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=33" type="module"></script>
+  <script src="app.js?v=34" type="module"></script>
 </body>
 </html>

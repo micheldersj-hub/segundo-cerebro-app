@@ -835,3 +835,61 @@ body.com-voz { overflow: hidden; }
 .espera-ok svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .espera-ok:active { background: var(--mar-claro); color: var(--mar); border-color: var(--mar); }
 .espera-todas { display: block; width: 100%; padding: 12px; border: 0; border-top: 1px solid var(--linha); background: none; color: var(--mar); font: inherit; font-size: 14px; font-weight: 600; }
+
+/* ---------- Tarefas (funil) ---------- */
+.tf-dias { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.tf-seta { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--superficie); box-shadow: var(--sombra); display: grid; place-items: center; color: var(--tinta-suave); }
+.tf-seta svg, .tf-add svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tf-dia-rotulo { flex: 1; border: 0; background: none; font: inherit; font-weight: 700; font-size: 16px; color: var(--tinta); }
+.tf-dia-rotulo.fora::after { content: ' · voltar a hoje'; font-weight: 500; font-size: 13px; color: var(--mar); }
+.tf-semana { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 12px 0 4px; }
+.tf-sd { border: 0; background: none; display: grid; justify-items: center; gap: 1px; padding: 6px 0; border-radius: 14px; color: var(--tinta-suave); font: inherit; }
+.tf-sd small { font-size: 11px; text-transform: capitalize; }
+.tf-sd b { font-size: 16px; color: var(--tinta); }
+.tf-sd i { width: 6px; height: 6px; border-radius: 50%; background: transparent; }
+.tf-sd i.pend { background: var(--ambar); } .tf-sd i.ok { background: var(--verde); }
+.tf-sd.hoje b { color: var(--mar); }
+.tf-sd.on { background: var(--mar); color: #fff; } .tf-sd.on b { color: #fff; } .tf-sd.on i.pend, .tf-sd.on i.ok { background: #fff; }
+.tf-progresso { display: flex; align-items: center; gap: 10px; margin: 8px 0 14px; font-size: 13px; color: var(--tinta-suave); }
+.tf-barra { flex: 1; height: 8px; border-radius: 99px; background: var(--superficie-2); overflow: hidden; }
+.tf-barra span { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--mar), var(--verde)); transition: width .4s; }
+.tf-nova { display: flex; gap: 8px; align-items: center; background: var(--superficie); border-radius: 16px; box-shadow: var(--sombra); padding: 6px; margin-bottom: 16px; }
+.tf-nova input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 16px; color: var(--tinta); padding: 8px 4px; outline: none; }
+.tf-pri { width: 36px; height: 36px; border-radius: 12px; border: 0; background: var(--superficie-2); color: var(--tinta-fraca); font-weight: 800; font-size: 17px; flex: none; }
+.tf-pri[data-p="1"] { background: var(--gravar-claro); color: var(--alerta); }
+.tf-add { width: 40px; height: 40px; border-radius: 12px; border: 0; background: var(--mar); color: #fff; display: grid; place-items: center; flex: none; }
+.tf-atrasadas { background: var(--gravar-claro); border-radius: var(--raio); padding: 12px; margin-bottom: 16px; }
+.tf-atr-cab { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 14px; color: var(--alerta); }
+.tf-atr-cab .link { font-size: 13px; }
+.tf-funil { display: grid; gap: 14px; }
+.tf-boca { position: relative; margin: 0 auto 8px; width: calc(100% - var(--i) * 12%); display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; color: #fff; font-weight: 700; font-size: 14px;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%); border-radius: 6px; }
+.tf-boca b { background: rgba(255,255,255,.25); border-radius: 99px; padding: 1px 9px; font-size: 13px; }
+.tf-etapa.azul .tf-boca { background: linear-gradient(90deg, #3B82F6, #6366F1); }
+.tf-etapa.ambar .tf-boca { background: linear-gradient(90deg, #F59E0B, #F97316); }
+.tf-etapa.verde .tf-boca { background: linear-gradient(90deg, #10B981, #0E9384); }
+.tf-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tf-card { display: flex; align-items: center; gap: 8px; background: var(--superficie); border-radius: 16px; box-shadow: var(--sombra); padding: 8px 8px 8px 10px; transition: opacity .2s, transform .2s; border-left: 4px solid transparent; }
+.tf-etapa.azul .tf-card { border-left-color: #3B82F6; } .tf-etapa.ambar .tf-card { border-left-color: #F59E0B; } .tf-etapa.verde .tf-card { border-left-color: #10B981; }
+.tf-atrasadas .tf-card { border-left-color: var(--alerta); }
+.tf-card.mexendo { opacity: .4; transform: scale(.98); }
+.tf-check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--linha); background: none; display: grid; place-items: center; color: transparent; flex: none; }
+.tf-check svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.tf-card.feito .tf-check { background: var(--verde); border-color: var(--verde); color: #fff; }
+.tf-card.feito .tf-t { text-decoration: line-through; color: var(--tinta-fraca); }
+.tf-corpo { flex: 1; min-width: 0; border: 0; background: none; text-align: left; font: inherit; color: inherit; padding: 4px 0; display: grid; gap: 3px; }
+.tf-t { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.tf-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tf-tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; background: var(--superficie-2); color: var(--tinta-suave); }
+.tf-tag.alta { background: var(--gravar-claro); color: var(--alerta); }
+.tf-tag.atr { background: var(--ambar-claro); color: var(--ambar); }
+.tf-nota { font-size: 12px; color: var(--tinta-fraca); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.tf-acoes { display: flex; gap: 4px; flex: none; }
+.tf-acoes button { width: 34px; height: 34px; border-radius: 10px; border: 0; background: var(--superficie-2); color: var(--tinta-suave); display: grid; place-items: center; }
+.tf-acoes button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tf-acoes button[data-tf-acao="avancar"] svg { fill: currentColor; stroke: none; }
+.tf-etapa.azul .tf-acoes [data-tf-acao="avancar"] { background: var(--azul-claro); color: var(--azul); }
+.tf-etapa.ambar .tf-acoes [data-tf-acao="avancar"] { background: var(--verde-claro); color: var(--verde); }
+.tf-acoes [data-tf-acao="hoje"] { background: var(--mar-claro); color: var(--mar); }
+.tf-vazio { margin: 0 auto; text-align: center; font-size: 13px; color: var(--tinta-fraca); padding: 6px 12px 2px; max-width: 280px; }
+.tf-adiar-todas { margin-top: 18px; }
