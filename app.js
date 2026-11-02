@@ -7,6 +7,7 @@ const EQUIPE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/equipe';
 const EXTRA = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/extra';
 const DOCUMENTO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/documento';
 const AGENDADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/agendador';
+const ATENDENTE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/atendente';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -23,7 +24,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v28';
+const VERSAO = 'v29';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -69,7 +70,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -956,7 +957,7 @@ async function carregarMais() {
   if (st.antecedencia_alarme) $('#alarme-min').textContent = st.antecedencia_alarme;
   aplicarPapel();
   carregarEquipe().catch(() => {});
-  if (st.dono !== false) carregarAgendador().catch(() => {});
+  if (st.dono !== false) { carregarAgendador().catch(() => {}); carregarAtendente().catch(() => {}); }
   const g = $('#b-google');
   g.hidden = st.google || !st.google_conectar; if (st.google_conectar) g.href = st.google_conectar;
 
@@ -1826,6 +1827,29 @@ for (const [id, campo] of [['#ag-inicio', 'hora_inicio'], ['#ag-fim', 'hora_fim'
     salvarAgendador({ [campo]: Number(e.target.value) });
   });
 }
+
+// ---- Atendimento automático por IA no WhatsApp (só o dono) ----
+function mostrarAtendente({ config: c, ultimas }) {
+  if (!c) return;
+  $('#atendente-sec').hidden = false;
+  $('#at-ativo').checked = c.ativo;
+  const sel = (id, v) => { const el = $(id); if (![...el.options].some((o) => o.value === String(v))) el.insertAdjacentHTML('beforeend', `<option value="${v}">${v}</option>`); el.value = String(v); };
+  sel('#at-espera', c.espera_min); sel('#at-max', c.max_auto_6h);
+  if (document.activeElement !== $('#at-conhecimento')) $('#at-conhecimento').value = c.conhecimento || '';
+  $('#at-lista').innerHTML = ultimas?.length
+    ? `<li class="ag-tit">Últimas respostas</li>` + ultimas.map((u) => `<li><b>${esc(u.nome || '+' + u.wa_id)} · ${u.resultado === 'enviado' ? 'respondi' : 'rascunho para você'}</b>
+        <span>${quando(u.created_at)}${u.texto ? ` · ${esc(u.texto.slice(0, 140))}${u.texto.length > 140 ? '…' : ''}` : ''}</span></li>`).join('')
+    : '';
+}
+async function carregarAtendente() { mostrarAtendente(await api('/atendente/config')); }
+async function salvarAtendente(campos, msg = 'Atendimento atualizado.') {
+  try { mostrarAtendente(await api('/atendente/config', { metodo: 'POST', corpo: campos })); aviso(msg); }
+  catch (e) { aviso(e.message); carregarAtendente().catch(() => {}); }
+}
+$('#at-ativo').addEventListener('change', (e) => salvarAtendente({ ativo: e.target.checked }, e.target.checked ? 'Atendimento automático ligado.' : 'Atendimento automático desligado.'));
+$('#at-espera').addEventListener('change', (e) => salvarAtendente({ espera_min: Number(e.target.value) }));
+$('#at-max').addEventListener('change', (e) => salvarAtendente({ max_auto_6h: Number(e.target.value) }));
+$('#b-at-salvar').addEventListener('click', () => salvarAtendente({ conhecimento: $('#at-conhecimento').value }, 'Base de conhecimento salva.'));
 
 // ---- Equipe (administrador) ----
 async function carregarEquipe() {

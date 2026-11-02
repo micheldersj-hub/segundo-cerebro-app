@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{var t=localStorage.getItem('cerebro-tema');if(t==='claro'||t==='escuro'){document.documentElement.dataset.theme=t==='claro'?'light':'dark';document.documentElement.dataset.tema=t}}catch(e){}</script>
-  <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -274,7 +274,7 @@
       </header>
       <details id="contato-perfil" class="perfil-contato" hidden><summary><span class="ic azul"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span id="perfil-linha">Quem é</span></summary><div id="perfil-corpo"></div></details>
       <section id="contato-rascunho" class="rascunho-card" hidden>
-        <p class="rascunho-tit">📅 O Dimy preparou uma resposta e espera sua aprovação</p>
+        <p class="rascunho-tit">💬 O Dimy preparou uma resposta e espera sua aprovação</p>
         <p id="rascunho-motivo" class="dica"></p>
         <pre id="rascunho-texto" class="rascunho-texto"></pre>
         <div class="acoes">
@@ -396,6 +396,21 @@
           <ul id="ag-lista" class="ag-lista"></ul>
         </div>
       </section>
+      <section id="atendente-sec" class="so-dono" hidden>
+        <h2 class="secao">Atendimento automático (IA)</h2>
+        <div class="ajustes">
+          <label class="linha-switch"><span><b>Responder clientes e prospects</b><small>Se você não responder, eu respondo no WhatsApp: dúvidas sobre o produto, qualificação do lead e encaminhamentos. Nunca cito valores. Família, amigos e equipe ficam de fora. Quando tenho dúvida, deixo um rascunho para você aprovar no contato.</small></span>
+            <input type="checkbox" id="at-ativo" class="switch"></label>
+          <div class="ag-grade">
+            <label>Esperar você (horário comercial)<select id="at-espera"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="30">30 min</option><option value="60">1 h</option></select></label>
+            <label>Máx. respostas por contato (6 h)<select id="at-max"><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+          </div>
+          <p class="dica">Fora do horário comercial eu respondo em cerca de 1 minuto. Se você entrar na conversa, eu paro.</p>
+          <label class="ag-campo"><span>O que eu sei sobre a B2B PAY</span><textarea id="at-conhecimento" rows="8" class="at-conhecimento"></textarea></label>
+          <button id="b-at-salvar" class="btn claro">Salvar o que eu sei</button>
+          <ul id="at-lista" class="ag-lista"></ul>
+        </div>
+      </section>
       <section id="equipe-sec" hidden>
         <h2 class="secao">Equipe</h2>
         <div class="ajustes">
@@ -461,6 +476,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=28" type="module"></script>
+  <script src="app.js?v=29" type="module"></script>
 </body>
 </html>
