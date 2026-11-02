@@ -23,7 +23,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v27';
+const VERSAO = 'v28';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -1953,15 +1953,25 @@ async function vozOraculo() {
     VozO.stream.getTracks().forEach((t) => t.stop());
     const mime = (VozO.mr.mimeType || 'audio/mp4').split(';')[0];
     const audio = new Blob(VozO.pedacos, { type: mime });
+    // Toque duplo rápido ou microfone mudo: nem envia, explica o que fazer.
+    if (performance.now() - VozO.inicio < 700 || audio.size < 800) {
+      marcarVoz(''); aviso('Segure um pouco: toque no microfone, fale o nome da empresa e toque de novo.'); return;
+    }
     VozO.enviando = true; marcarVoz('enviando');
     try {
       const r = await api('/dossies/voz', { metodo: 'POST', corpo: audio, tipo: mime });
       aviso(`Pesquisando: ${r.alvo}`);
       ir(`dossie/${r.id}`);
-    } catch (err) { aviso(err.message); }
+    } catch (err) {
+      // Mensagens do servidor já vêm em português; falha de rede vira algo compreensível.
+      const tecnico = /load failed|failed to fetch|networkerror|network request|^erro \d+$/i.test(err.message || '');
+      aviso(tecnico ? 'Sem conexão para enviar o áudio. Confira a internet e tente de novo.' : err.message);
+      diag('oraculo-voz-falhou', String(err.message || ''));
+    }
     finally { VozO.enviando = false; marcarVoz(''); }
   };
   VozO.mr.start();
+  VozO.inicio = performance.now();
   marcarVoz('ouvindo');
   if (navigator.vibrate) navigator.vibrate(30);
   VozO.timer = setTimeout(() => VozO.mr?.state === 'recording' && VozO.mr.stop(), 25000);
