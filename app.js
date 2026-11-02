@@ -24,7 +24,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v29';
+const VERSAO = 'v30';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -2618,7 +2618,7 @@ function fecharVoz() {
 
 async function ouvirComando() {
   try { await ouvirComandoInterno(); }
-  catch (e) { diag('voz-erro', e?.message || String(e)); vozUI('erro', `Não consegui ouvir: ${e?.message || 'erro'}. Toque de novo.`); Voz.estado = 'parado'; }
+  catch (e) { diag('voz-erro', e?.message || String(e)); vozUI('erro', erroAmigavel(e?.message)); Voz.estado = 'parado'; }
 }
 async function ouvirComandoInterno() {
   diag('voz-toque', `estado=${Voz.estado}`);
@@ -2629,7 +2629,10 @@ async function ouvirComandoInterno() {
   if (Rec.ativo) { aviso('Há uma gravação em andamento. Pare a gravação para usar o comando de voz.'); return; }
   if (typeof Dimy !== 'undefined' && Dimy.ligado) desligarDimy('Mãos-livres pausado para o comando de voz.');
   abrirVoz();
-  try { speechSynthesis.cancel(); } catch { /* sem voz */ }
+  let falava = false;
+  try { falava = speechSynthesis.speaking; speechSynthesis.cancel(); } catch { /* sem voz */ }
+  // iPhone: gravar enquanto a voz ainda está saindo corrompe o áudio; espera a sessão de som trocar.
+  if (falava) await new Promise((r) => setTimeout(r, 400));
   // iPhone: a voz só toca depois de liberada por um toque; libera agora, no toque do microfone.
   if (!Voz.liberou) { try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch { /* sem voz */ } Voz.liberou = true; }
   atualizarLocalSilencioso().catch(() => {});
@@ -2699,7 +2702,16 @@ async function enviarComando() {
     const r = await api('/audio?voz=1', { metodo: 'POST', corpo: audio, tipo: mime });
     if (r.ignorado || !r.resposta) { vozUI('parado', 'Não entendi. Toque e fale de novo.'); return; }
     await mostrarRespostaVoz(r.texto, r.resposta, r.acoes || []);
-  } catch (e) { diag('voz-envio', e.message); vozUI('erro', e.message || 'Falhou. Tente de novo.'); }
+  } catch (e) { diag('voz-envio', e.message); vozUI('erro', erroAmigavel(e.message)); }
+}
+
+/** Nunca mostra erro técnico (JSON, código HTTP, nome de serviço) na tela. */
+function erroAmigavel(m) {
+  const t = String(m || '');
+  if (!t || /whisper|openai|invalid|format|\{|\d{3}:|error|failed|exception/i.test(t)) {
+    return /load failed|network|fetch|conex/i.test(t) ? 'Sem conexão. Confira a internet e toque de novo.' : 'Não consegui entender o áudio. Toque e fale de novo.';
+  }
+  return t;
 }
 
 async function comandoTexto(texto) {
@@ -2709,7 +2721,7 @@ async function comandoTexto(texto) {
   try {
     const r = await api('/chat', { metodo: 'POST', corpo: { texto, voz: true, id: `voz-${Date.now()}` } });
     await mostrarRespostaVoz(texto, r.resposta, r.acoes || []);
-  } catch (e) { vozUI('erro', e.message); }
+  } catch (e) { vozUI('erro', erroAmigavel(e.message)); }
 }
 
 async function mostrarRespostaVoz(ouvido, resposta, acoes) {
