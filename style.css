@@ -801,3 +801,37 @@ body.com-voz { overflow: hidden; }
 .rascunho-texto { margin: 0; white-space: pre-wrap; font: inherit; font-size: 14.5px; line-height: 1.45; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--mar) 9%, transparent); max-height: 260px; overflow: auto; }
 
 .btn.desativado { opacity: .45; }
+
+/* Esperando sua resposta: linha compacta que abre a lista */
+.caixa-espera { background: var(--superficie); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+.caixa-espera summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer; }
+.caixa-espera summary::-webkit-details-marker { display: none; }
+.caixa-espera .seta { width: 18px; height: 18px; fill: none; stroke: var(--tinta-fraca); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; flex: none; }
+.caixa-espera[open] .seta { transform: rotate(90deg); }
+.espera-txt { flex: 1; min-width: 0; display: grid; }
+.espera-txt b { font-size: 15px; font-weight: 700; }
+.espera-txt small { font-size: 13px; color: var(--tinta-suave); }
+.caixa-espera.tem-nova .espera-txt small { color: var(--mar); font-weight: 600; }
+.pilha-avatares { display: flex; flex: none; }
+.pilha-avatares .av { margin-left: -10px; box-shadow: 0 0 0 2px var(--superficie); }
+.pilha-avatares .av:first-child { margin-left: 0; }
+.av { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; flex: none; background: var(--azul-claro); color: var(--azul); }
+.av svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+.av.roxo { background: var(--roxo-claro); color: var(--roxo); } .av.ambar { background: var(--ambar-claro); color: var(--ambar); }
+.av.rosa { background: var(--rosa-claro); color: var(--rosa); } .av.verde { background: var(--verde-claro); color: var(--verde); }
+.av.mais { background: var(--superficie-2); color: var(--tinta-suave); font-size: 11px; }
+.av.p { width: 34px; height: 34px; }
+.espera-lista { list-style: none; margin: 0; padding: 0 6px; border-top: 1px solid var(--linha); }
+.espera-lista li { display: flex; align-items: center; border-bottom: 1px solid var(--linha); transition: opacity .2s, transform .2s; }
+.espera-lista li:last-child { border-bottom: 0; }
+.espera-lista li.velha { opacity: .6; }
+.espera-lista li.saindo { opacity: 0; transform: translateX(24px); }
+.espera-item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 8px; border: 0; background: none; text-align: left; color: inherit; font: inherit; }
+.espera-corpo { flex: 1; min-width: 0; display: grid; }
+.espera-corpo b { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.espera-corpo span { font-size: 13px; color: var(--tinta-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.espera-h { font-size: 12px; color: var(--tinta-fraca); flex: none; }
+.espera-ok { width: 34px; height: 34px; margin-right: 4px; border-radius: 50%; border: 1px solid var(--linha); background: none; display: grid; place-items: center; color: var(--tinta-fraca); flex: none; }
+.espera-ok svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.espera-ok:active { background: var(--mar-claro); color: var(--mar); border-color: var(--mar); }
+.espera-todas { display: block; width: 100%; padding: 12px; border: 0; border-top: 1px solid var(--linha); background: none; color: var(--mar); font: inherit; font-size: 14px; font-weight: 600; }

@@ -24,7 +24,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v31';
+const VERSAO = 'v32';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -93,7 +93,24 @@ function quando(iso) {
   const mesmoDia = d.toDateString() === hoje.toDateString();
   return mesmoDia ? hora(iso) : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }) + ' ' + hora(iso);
 }
-const nomeDe = (c) => c?.name || (c?.wa_id ? '+' + c.wa_id : 'Contato');
+/** Número legível: 5537996697777 → (37) 99669-7777; outros países ficam com +DDI. */
+function foneBonito(wa) {
+  const d = String(wa || '').replace(/\D/g, '');
+  const m = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(d);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : d ? `+${d}` : 'Contato';
+}
+const nomeValido = (n) => !!n && !/^<?unknown>?$/i.test(n.trim()) && !/^\+?\d[\d\s-]+$/.test(n.trim());
+const nomeDe = (c) => (nomeValido(c?.name) ? c.name.trim() : foneBonito(c?.wa_id));
+/** "agora", "há 12 min", "há 3 h", "ontem", "há 5 dias". */
+function ha(iso) {
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (!(s >= 0)) return '';
+  if (s < 60) return 'agora';
+  if (s < 3600) return `há ${Math.round(s / 60)} min`;
+  if (s < 86400) return `há ${Math.round(s / 3600)} h`;
+  const dias = Math.round(s / 86400);
+  return dias === 1 ? 'ontem' : `há ${dias} dias`;
+}
 
 // ---------------------------------------------------------------------------
 // Navegação
@@ -156,7 +173,7 @@ function listaAgora(d) {
   for (const e of agenda.filter((x) => new Date(x.inicio) - Date.now() < 3 * 3600e3 && new Date(x.inicio) > Date.now() - 15 * 60e3).slice(0, 3)) {
     itens.push({ tipo: 'agenda', rotulo: `Agenda · ${hora(e.inicio)}`, texto: `${e.titulo}${e.local ? `, em ${e.local}` : ''}.`, ...(eEndereco(e.local) ? { acao: 'Ir com Waze', url: linkWaze(e.local) } : {}) });
   }
-  for (const c of d.aguardando.slice(0, 8)) {
+  for (const c of d.aguardando.filter((x) => Date.now() - Date.parse(x.last_in_at || x.last_seen) < 48 * 3600e3).slice(0, 4)) {
     itens.push({ tipo: 'whats', rotulo: 'Espera resposta', texto: `${nomeDe(c)}${c.last_summary ? `: ${c.last_summary}` : ' mandou mensagem.'}`, acao: 'Responder', ir: `contato/${c.wa_id}` });
   }
   for (const l of d.lembretes.filter((x) => new Date(x.due_at) - Date.now() < 6 * 3600e3).slice(0, 3)) {
@@ -272,13 +289,43 @@ async function carregarHoje() {
         <span class="pilula-hora"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>${quandoCurto(l.due_at)}</span></button>`).join('')
     : '<button class="vazio-cartao" data-acao="lembrete"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Criar um lembrete</button>';
 
-  const esp = d.aguardando || [];
-  $('#bloco-espera').hidden = !esp.length;
-  $('#lista-espera').innerHTML = esp.slice(0, 6).map((c) => `<li><button class="pessoa" data-ir="contato/${esc(c.wa_id)}">
-      <span class="avatar-p">${esc(iniciais(nomeDe(c)))}</span>
-      <span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}</span><span class="d">${esc(c.last_summary || 'Mensagem nova')}</span></span>
-      <span class="h">${quando(c.last_in_at || c.last_seen)}</span></button></li>`).join('');
+  desenharEspera(d.aguardando || []);
 }
+
+// "Esperando sua resposta": uma linha compacta; a lista só abre quando você toca.
+const CORES_AV = ['azul', 'roxo', 'ambar', 'rosa', 'verde'];
+const corDe = (wa) => CORES_AV[[...String(wa)].reduce((s, ch) => s + ch.charCodeAt(0), 0) % CORES_AV.length];
+const avatar = (c, cls = '') => `<span class="av ${corDe(c.wa_id)} ${cls}">${nomeValido(c.name) ? esc(iniciais(c.name)) : '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>'}</span>`;
+function desenharEspera(esp) {
+  const sec = $('#bloco-espera');
+  sec.hidden = !esp.length;
+  if (!esp.length) return;
+  const t = (c) => c.last_in_at || c.last_seen;
+  const ord = [...esp].sort((x, y) => Date.parse(t(y)) - Date.parse(t(x)));
+  const novas = ord.filter((c) => Date.now() - Date.parse(t(c)) < 24 * 3600e3).length;
+  $('#espera-avatares').innerHTML = ord.slice(0, 3).map((c) => avatar(c)).join('') + (ord.length > 3 ? `<span class="av mais">+${ord.length - 3}</span>` : '');
+  $('#espera-titulo').textContent = `${ord.length} esperando você`;
+  $('#espera-sub').textContent = novas ? `${novas} nova${novas > 1 ? 's' : ''} hoje · última ${ha(t(ord[0]))}` : `a mais recente ${ha(t(ord[0]))}`;
+  $('#caixa-espera').classList.toggle('tem-nova', !!novas);
+  $('#lista-espera').innerHTML = ord.slice(0, 6).map((c) => {
+    const velha = Date.now() - Date.parse(t(c)) > 72 * 3600e3;
+    return `<li class="${velha ? 'velha' : ''}"><button class="espera-item" data-ir="contato/${esc(c.wa_id)}">${avatar(c, 'p')}
+      <span class="espera-corpo"><b>${esc(nomeDe(c))}</b><span>${esc(c.last_summary || 'Mandou mensagem')}</span></span>
+      <span class="espera-h">${ha(t(c))}</span></button>
+      <button class="espera-ok" data-resolver="${esc(c.wa_id)}" aria-label="Marcar como respondida"><svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg></button></li>`;
+  }).join('');
+}
+try { if (localStorage.getItem('cerebro-espera-aberta') === '1') $('#caixa-espera').open = true; } catch { /* sem armazenamento */ }
+$('#caixa-espera').addEventListener('toggle', (e) => { try { localStorage.setItem('cerebro-espera-aberta', e.currentTarget.open ? '1' : '0'); } catch { /* ok */ } });
+$('#lista-espera').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-resolver]'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const li = b.closest('li'); li.classList.add('saindo');
+  try {
+    await api(`/contatos/${b.dataset.resolver}/resolvido`, { metodo: 'POST' });
+    setTimeout(() => { li.remove(); const resto = [...document.querySelectorAll('#lista-espera li')]; if (!resto.length) $('#bloco-espera').hidden = true; else $('#espera-titulo').textContent = `${resto.length} esperando você`; }, 220);
+  } catch (err) { li.classList.remove('saindo'); aviso(err.message); }
+});
 
 const iniciais = (n) => n.replace(/^\+/, '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '•';
 function quandoCurto(iso) {
