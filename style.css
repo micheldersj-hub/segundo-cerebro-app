@@ -1265,3 +1265,11 @@ body.com-voz { overflow: hidden; }
 .cfg-preset.on em { color: color-mix(in srgb, var(--fundo) 75%, transparent); }
 .cfg-kpis .olho-kpi b { font-size: clamp(15px, 4.6vw, 19px); white-space: nowrap; }
 @media (max-width: 360px) { .cfg-atalho { display: none; } }
+
+/* v42: barra e painéis do fundo presos à área visível (corrige a barra "subindo" no iPhone depois do teclado) */
+.abas { transform: translate3d(0, var(--vv-desloc, 0px), 0); }
+.painel-resposta, .compositor, .anexo-chip { transform: translate3d(0, calc(var(--vv-desloc, 0px) + var(--vv-teclado, 0px)), 0); z-index: 3; }
+:root.teclado .abas, :root.teclado #pilula-gravando { visibility: hidden; }
+:root.teclado .painel-resposta, :root.teclado .compositor { bottom: env(safe-area-inset-bottom); }
+:root.teclado .anexo-chip { bottom: calc(70px + env(safe-area-inset-bottom)); }
+:root.teclado #app { padding-bottom: 12px; }

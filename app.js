@@ -27,7 +27,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v41';
+const VERSAO = 'v42';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -3926,3 +3926,41 @@ $('#v-config').addEventListener('submit', async (e) => {
     desenharConfig();
   } catch (err) { aviso(err.message); if (b) b.disabled = false; }
 });
+
+// ---------------------------------------------------------------------------
+// Barra de baixo presa ao fundo de verdade (iPhone): depois que o teclado abre e fecha, o iOS às vezes continua
+// medindo a tela como se o teclado estivesse lá, e tudo que é "fixo no fundo" passa a andar junto com a rolagem.
+// Aqui a barra segue a área visível (visualViewport) e some enquanto você digita; os painéis de resposta sobem
+// junto com o teclado.
+// ---------------------------------------------------------------------------
+(function fundoEstavel() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const raiz = document.documentElement;
+  const digitando = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(TEXTAREA|SELECT)$/.test(a.tagName) || (a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|file)$/i.test(a.type))); };
+  let quadro = 0;
+  const ajustar = () => {
+    cancelAnimationFrame(quadro);
+    quadro = requestAnimationFrame(() => {
+      // > 0: o fundo visível está abaixo do que o navegador acha (bug do iOS) → desce a barra
+      // < 0: o teclado cobre o fundo → esconde a barra e sobe o painel de resposta
+      const desloc = Math.round(vv.offsetTop + vv.height - window.innerHeight);
+      const teclado = desloc < -80 && digitando();
+      raiz.classList.toggle('teclado', teclado);
+      raiz.style.setProperty('--vv-desloc', `${teclado ? 0 : Math.max(0, desloc)}px`);
+      raiz.style.setProperty('--vv-teclado', `${teclado ? desloc : 0}px`);
+    });
+  };
+  vv.addEventListener('resize', ajustar);
+  vv.addEventListener('scroll', ajustar);
+  window.addEventListener('resize', ajustar);
+  window.addEventListener('scroll', ajustar, { passive: true });
+  document.addEventListener('focusin', () => setTimeout(ajustar, 350));
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (!digitando()) window.scrollTo(window.scrollX, window.scrollY);   // força o iOS a refazer as medidas da tela
+    ajustar();
+  }, 150));
+  window.addEventListener('pageshow', ajustar);
+  document.addEventListener('visibilitychange', ajustar);
+  ajustar();
+})();
