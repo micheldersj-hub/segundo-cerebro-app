@@ -26,7 +26,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v39';
+const VERSAO = 'v40';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -83,6 +83,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
 }
 
 function aviso(msg) {
+  if (SEM_CREDITO.test(String(msg))) msg = 'O Dimy está sem crédito de IA. Veja como resolver no Radar.';
   const t = $('#toast');
   t.textContent = msg; t.hidden = false;
   clearTimeout(aviso.t); aviso.t = setTimeout(() => (t.hidden = true), 3200);
@@ -2693,14 +2694,64 @@ document.addEventListener('click', async (e) => {
 // Radar: o Dimy conectado à internet (notícias, mercado, aprendizado)
 // ---------------------------------------------------------------------------
 const Radar = { timer: null };
+// Mapa neural do Dimy: núcleo luminoso, axônios curvos até cada fonte, dendritos e impulsos de luz correndo pelas conexões.
+// Malha de fundo com semente fixa (sempre o mesmo desenho); animação só por SVG/CSS e desligada com "reduzir movimento".
 function desenharMapa() {
-  const web = [['Notícias', 60, 34], ['Mercado', 300, 34], ['Concorrentes', 56, 118], ['Regulação', 304, 118]];
-  const voce = [['Memória', 70, 212], ['WhatsApp', 150, 232], ['Agenda', 230, 232], ['Oráculo', 300, 206]];
-  const cx = 180, cy = 120;
-  const no = (t, x, y, cls) => `<g class="${cls}"><line class="lig ${cls === 'n-web' ? 'web' : 'voce'}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"/><circle cx="${x}" cy="${y}" r="7" stroke-width="2"/><text x="${x}" y="${y - 12}" text-anchor="middle">${t}</text></g>`;
-  $('#radar-mapa').innerHTML = `<text class="legenda" x="180" y="14" text-anchor="middle">INTERNET</text><text class="legenda" x="180" y="248" text-anchor="middle">VOCÊ</text>
-    ${web.map(([t, x, y]) => no(t, x, y, 'n-web')).join('')}${voce.map(([t, x, y]) => no(t, x, y + 0, 'n-voce')).join('')}
-    <g class="n-dimy"><circle cx="${cx}" cy="${cy}" r="34"/><text x="${cx}" y="${cy + 5}" text-anchor="middle">Dimy</text></g>`;
+  const W = 360, H = 250, cx = 180, cy = 124;
+  let semente = 7;
+  const rnd = () => { semente = (semente * 16807) % 2147483647; return (semente - 1) / 2147483646; };
+  const fontes = [
+    ['Notícias', 56, 46, 'web'], ['Mercado', 304, 46, 'web'], ['Concorrentes', 42, 120, 'web'], ['Regulação', 318, 120, 'web'],
+    ['Memória', 66, 190, 'voce'], ['WhatsApp', 138, 210, 'voce'], ['Agenda', 222, 210, 'voce'], ['Oráculo', 294, 190, 'voce'],
+  ];
+  // malha de fundo: neurônios pequenos ligados aos vizinhos mais próximos
+  const pts = Array.from({ length: 46 }, () => [8 + rnd() * (W - 16), 10 + rnd() * (H - 20)]).filter(([x, y]) => Math.hypot(x - cx, y - cy) > 40);
+  const malha = [];
+  pts.forEach(([x, y], a) => {
+    pts.map(([u, v], b) => [Math.hypot(u - x, v - y), b]).filter(([d, b]) => b > a && d < 58).sort((m, n) => m[0] - n[0]).slice(0, 2)
+      .forEach(([, b]) => malha.push(`M${x.toFixed(1)} ${y.toFixed(1)}L${pts[b][0].toFixed(1)} ${pts[b][1].toFixed(1)}`));
+  });
+  // axônio curvo do núcleo até a fonte (controle deslocado na perpendicular)
+  const axonio = (x, y, k) => {
+    const mx = (cx + x) / 2, my = (cy + y) / 2, dx = x - cx, dy = y - cy, L = Math.hypot(dx, dy) || 1, curva = (k % 2 ? 1 : -1) * 18;
+    return `M${cx} ${cy}Q${(mx - (dy / L) * curva).toFixed(1)} ${(my + (dx / L) * curva).toFixed(1)} ${x} ${y}`;
+  };
+  const dendritos = (x, y) => Array.from({ length: 3 }, (_, i) => {
+    const ang = Math.atan2(y - cy, x - cx) + (i - 1) * 0.75 + (rnd() - 0.5) * 0.3, r = 10 + rnd() * 7;
+    const ex = x + Math.cos(ang) * r, ey = y + Math.sin(ang) * r;
+    return `<path d="M${x} ${y}Q${(x + Math.cos(ang + 0.4) * r * 0.6).toFixed(1)} ${(y + Math.sin(ang + 0.4) * r * 0.6).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}"/><circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="1.3"/>`;
+  }).join('');
+  const caminhos = fontes.map(([, x, y], k) => `<path id="ax${k}" d="${axonio(x, y, k)}"/>`).join('');
+  const sinais = fontes.map(([, , , g], k) => {
+    const dur = (2.4 + (k % 3) * 0.45).toFixed(2), ini = (k * 0.37).toFixed(2);
+    const ida = `<circle r="2.6" class="sinal ${g}"><animateMotion dur="${dur}s" begin="${ini}s" repeatCount="indefinite" keyPoints="1;0" keyTimes="0;1" calcMode="linear"><mpath href="#ax${k}"/></animateMotion></circle>`;
+    const volta = g === 'voce' ? `<circle r="2" class="sinal volta"><animateMotion dur="${(+dur + 0.8).toFixed(2)}s" begin="${(+ini + 1.2).toFixed(2)}s" repeatCount="indefinite"><mpath href="#ax${k}"/></animateMotion></circle>` : '';
+    return ida + volta;
+  }).join('');
+  const nos = fontes.map(([t, x, y, g], k) => `<g class="neuronio ${g}" style="--d:${(k * 0.29).toFixed(2)}s">
+      <g class="dend">${dendritos(x, y)}</g>
+      <circle class="halo" cx="${x}" cy="${y}" r="11"/><circle class="soma" cx="${x}" cy="${y}" r="5.2"/>
+      <text x="${Math.min(W - 40, Math.max(40, x))}" y="${y + (y > cy ? 19 : -12)}" text-anchor="middle">${t}</text></g>`).join('');
+  $('#radar-mapa').innerHTML = `
+    <defs>
+      <radialGradient id="nucleo" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#E6FFFB"/><stop offset=".35" stop-color="#5EEAD4"/><stop offset=".75" stop-color="#0E9384"/><stop offset="1" stop-color="#075E57"/></radialGradient>
+      <radialGradient id="aura"><stop offset="0" stop-color="#2DD4BF" stop-opacity=".55"/><stop offset="1" stop-color="#2DD4BF" stop-opacity="0"/></radialGradient>
+      <filter id="brilho" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <path class="malha" d="${malha.join('')}"/>
+    <g class="malha-nos">${pts.map(([x, y], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.8 + (i % 3) * 0.45).toFixed(2)}" style="--d:${((i * 0.53) % 4).toFixed(2)}s"/>`).join('')}</g>
+    <text class="legenda" x="${cx}" y="16" text-anchor="middle">INTERNET</text><text class="legenda" x="${cx}" y="245" text-anchor="middle">VOCÊ</text>
+    <g class="axonios">${caminhos}</g>
+    <g filter="url(#brilho)">${sinais}</g>
+    ${nos}
+    <g class="nucleo">
+      <circle cx="${cx}" cy="${cy}" r="58" fill="url(#aura)" class="aura"/>
+      <circle cx="${cx}" cy="${cy}" r="30" class="onda"/><circle cx="${cx}" cy="${cy}" r="30" class="onda o2"/>
+      <circle cx="${cx}" cy="${cy}" r="31" class="orbita"/>
+      <circle cx="${cx}" cy="${cy}" r="27" fill="url(#nucleo)" filter="url(#brilho)"/>
+      <path class="sulcos" d="M${cx - 15} ${cy - 6}q6-10 15-5q9-6 15 4M${cx - 17} ${cy + 5}q8 6 16 0q9 6 17-1M${cx} ${cy - 11}v22"/>
+      <text x="${cx}" y="${cy + 4.5}" text-anchor="middle">Dimy</text>
+    </g>`;
 }
 async function carregarRadar() {
   clearTimeout(Radar.timer);
@@ -2716,7 +2767,13 @@ async function carregarRadar() {
     Radar.timer = setTimeout(() => location.hash === '#radar' && carregarRadar().catch(() => {}), 10000);
     return;
   }
-  if (e.status === 'erro') { box.innerHTML = `<div class="processando"><p><b>A última leitura falhou.</b></p><p class="dica">${esc(e.erro || '')}</p>${botoes}</div>`; return; }
+  if (e.status === 'erro') {
+    const credito = SEM_CREDITO.test(e.erro || '');
+    box.innerHTML = credito
+      ? `<div class="processando aviso-credito"><p><b>A leitura de hoje está esperando crédito de IA.</b></p><p class="dica">A conta da Anthropic, que o Dimy usa para pesquisar e pensar, ficou sem saldo. Recarregue em <b>console.anthropic.com › Plans &amp; Billing</b>. Depois disso, o Radar é refeito sozinho em até 30 minutos (das 7h às 20h) e as mensagens que chegaram enquanto isso entram na memória, sem perder nada.</p>${botoes}</div>`
+      : `<div class="processando"><p><b>A última leitura falhou.</b></p><p class="dica">${esc(erroAmigavelTexto(e.erro))}</p>${botoes}</div>`;
+    return;
+  }
   const c = e.conteudo || {}, an = c.analise || {};
   const lista = (t, arr) => arr?.length ? `<div class="bloco-o"><h3>${t}</h3><ul class="marcadores">${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   box.innerHTML = `<article class="manchete"><small>Radar de ${esc(fmtData(e.dia))}</small><b>${esc(c.manchete || '')}</b></article>
@@ -2877,12 +2934,24 @@ async function enviarComando() {
 }
 
 /** Nunca mostra erro técnico (JSON, código HTTP, nome de serviço) na tela. */
+// Falta de crédito da IA: explica em português, sem JSON técnico.
+const SEM_CREDITO = /credit balance|purchase credits|insufficient.{0,20}(credit|quota)/i;
+const MSG_SEM_CREDITO = 'O Dimy está sem crédito de IA (conta da Anthropic). Recarregue em console.anthropic.com › Plans & Billing; o que chegou enquanto isso não se perde e é processado sozinho depois.';
 function erroAmigavel(m) {
   const t = String(m || '');
+  if (SEM_CREDITO.test(t)) return MSG_SEM_CREDITO;
   if (!t || /whisper|openai|invalid|format|\{|\d{3}:|error|failed|exception/i.test(t)) {
     return /load failed|network|fetch|conex/i.test(t) ? 'Sem conexão. Confira a internet e toque de novo.' : 'Não consegui entender o áudio. Toque e fale de novo.';
   }
   return t;
+}
+
+// Erro técnico genérico (sem JSON na tela).
+function erroAmigavelTexto(t) {
+  t = String(t || '');
+  if (SEM_CREDITO.test(t)) return MSG_SEM_CREDITO;
+  if (/\{|"type"|\b\d{3}:/.test(t)) return 'Um serviço externo não respondeu. Toque em Atualizar agora para tentar de novo.';
+  return t || 'Erro desconhecido.';
 }
 
 async function comandoTexto(texto) {
