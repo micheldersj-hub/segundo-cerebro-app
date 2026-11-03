@@ -10,6 +10,7 @@ const AGENDADOR = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/agendad
 const ATENDENTE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/atendente';
 const TAREFAS = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/tarefas';
 const OLHO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/olho';
+const CONSUMO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/consumo';
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -26,7 +27,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v40';
+const VERSAO = 'v41';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -72,9 +73,10 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
-  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/olho/.test(caminho) ? OLHO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
+  const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/olho/.test(caminho) ? OLHO : /^\/consumo/.test(caminho) ? CONSUMO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
   if (base === TAREFAS) caminho = caminho.replace(/^\/tarefas/, '');
   if (base === OLHO) caminho = caminho.replace(/^\/olho/, '');
+  if (base === CONSUMO) caminho = caminho.replace(/^\/consumo/, '');
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
@@ -122,16 +124,16 @@ function ha(iso) {
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar', olho: '#v-olho',
+  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar', olho: '#v-olho', config: '#v-config',
 };
-const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje', olho: 'hoje' };
+const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje', olho: 'hoje', config: 'mais' };
 
 function ir(destino) { location.hash = destino; }
 
 async function rota() {
   const [nome, arg] = (location.hash.slice(1) || 'hoje').split('/');
   let vista = nome === 'avisos' ? 'mais' : VISTAS[nome] ? nome : 'hoje';
-  if ((vista === 'whats' || vista === 'contato') && eu && !eu.dono) vista = 'hoje';   // WhatsApp é só do dono
+  if ((vista === 'whats' || vista === 'contato' || vista === 'config') && eu && !eu.dono) vista = 'hoje';   // WhatsApp é só do dono
   for (const [k, sel] of Object.entries(VISTAS)) $(sel).hidden = k !== vista;
   document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.ir === (ABA_DE[vista] || vista)));
   $('#pilula-gravando').hidden = !Rec.ativo || vista === 'gravando';
@@ -152,6 +154,7 @@ async function rota() {
     if (vista === 'dossie') await carregarDossie(arg);
     if (vista === 'radar') await carregarRadar();
     if (vista === 'olho') await carregarOlho();
+    if (vista === 'config') await carregarConfig();
   } catch (e) { aviso(e.message); }
 }
 
@@ -3674,4 +3677,252 @@ $('#v-olho').addEventListener('submit', async (e) => {
       const r = await api('/olho/config', { metodo: 'POST', corpo }); Olho.cfg = r.config; aviso('Ajustes salvos.'); await carregarOlho();
     }
   } catch (err) { aviso(err.message); }
+});
+
+// ---------------------------------------------------------------------------
+// Configuração: consumo de IA (Anthropic), temporizadores das rotinas e alertas de crédito
+// ---------------------------------------------------------------------------
+const Cfg = { aba: 'consumo', p: null, sel: null };
+const usd = (v, casas) => {
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  const n = Number(v), c = casas ?? (n > 0 && n < 0.01 ? 3 : 2);
+  return 'US$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c });
+};
+const diaCurto = (iso) => new Date(`${String(iso).slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+const duracao = (d) => (d === null || d === undefined ? null : d >= 365 ? 'mais de 1 ano' : d >= 60 ? `~${Math.round(d / 30)} meses` : d >= 1.5 ? `~${Math.round(d)} dias` : d >= 1 ? '~1 dia' : `~${Math.max(1, Math.round(d * 24))} h`);
+
+async function carregarConfig() {
+  const [, aba] = location.hash.slice(1).split('/');
+  Cfg.aba = ['consumo', 'economia', 'alertas'].includes(aba) ? aba : 'consumo';
+  document.querySelectorAll('#cfg-abas [data-cfg-aba]').forEach((b) => b.classList.toggle('on', b.dataset.cfgAba === Cfg.aba));
+  if (!Cfg.p || Date.now() - Date.parse(Cfg.p.atualizado_em) > 20000) {
+    if (!Cfg.p) $('#cfg-corpo').innerHTML = '<p class="dica centro">Carregando…</p>';
+    Cfg.p = await api('/consumo/painel');
+  }
+  desenharConfig();
+}
+function desenharConfig() {
+  const p = Cfg.p; if (!p) return;
+  $('#cfg-corpo').innerHTML = Cfg.aba === 'economia' ? cfgEconomia(p) : Cfg.aba === 'alertas' ? cfgAlertas(p) : cfgConsumo(p);
+}
+
+function cfgHero(p) {
+  const s = p.saldo, temSaldo = s.estimado !== null && s.estimado !== undefined;
+  const frac = temSaldo && s.informado > 0 ? Math.max(0, Math.min(1, s.estimado / s.informado)) : 0;
+  const nivel = !temSaldo ? 'vazio' : p.sem_credito || s.estimado <= 0 ? 'zerado' : (p.dias_restantes !== null && p.dias_restantes <= p.alertas.dias) || s.estimado <= p.alertas.saldo_usd ? 'baixo' : 'ok';
+  const R = 46, C = 2 * Math.PI * R;
+  const dura = duracao(p.dias_restantes);
+  const fim = p.acaba_em ? new Date(p.acaba_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', timeZone: 'America/Sao_Paulo' }) : null;
+  return `
+  <section class="cfg-hero ${nivel}">
+    ${p.sem_credito ? '<p class="cfg-alerta">O crédito acabou: a Anthropic está recusando as chamadas. Recarregue em <b>console.anthropic.com › Plans &amp; Billing</b>.</p>' : ''}
+    <div class="cfg-hero-linha">
+      <svg class="cfg-anel" viewBox="0 0 110 110" aria-hidden="true">
+        <circle cx="55" cy="55" r="${R}" class="trilho"/>
+        ${frac > 0 ? `<circle cx="55" cy="55" r="${R}" class="carga" stroke-dasharray="${(C * frac).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 55 55)"/>` : ''}
+        <text x="55" y="52" class="pct">${temSaldo ? Math.round(frac * 100) + '%' : '?'}</text>
+        <text x="55" y="68" class="pct-sub">${temSaldo ? 'restante' : 'sem saldo'}</text>
+      </svg>
+      <div class="cfg-hero-txt">
+        <small>Saldo estimado</small>
+        <b>${temSaldo ? usd(Math.max(0, s.estimado), 2) : '—'}</b>
+        <span>${temSaldo ? (dura ? `Dura ${dura}${fim ? ` · até ${fim}` : ''}` : 'Ainda medindo o ritmo de uso') : 'Informe o saldo da conta para eu calcular quanto dura.'}</span>
+        <span class="ritmo">${p.ritmo_dia !== null ? `Ritmo: ${usd(p.ritmo_dia)}/dia` : 'Ritmo: coletando dados'}</span>
+      </div>
+    </div>
+    <div class="cfg-hero-acoes">
+      <button class="btn pequeno" data-cfg-form="recarga">${temSaldo ? 'Recarreguei' : 'Informar saldo'}</button>
+      ${temSaldo ? '<button class="btn pequeno claro" data-cfg-form="conferir">Conferir saldo</button>' : ''}
+    </div>
+    <div id="cfg-form-saldo"></div>
+  </section>`;
+}
+function cfgFormSaldo(tipo) {
+  const recarga = tipo === 'recarga';
+  return `<form class="cfg-saldo-form" data-cfg-saldo="${tipo}">
+    <label class="campo"><span>${recarga ? 'Saldo da conta agora (US$)' : 'O console mostra agora um saldo de (US$)'}</span>
+      <input name="v" inputmode="decimal" placeholder="ex.: 25,00" autocomplete="off" required></label>
+    <p class="campo-dica">${recarga ? 'A partir de agora eu desconto o que o Dimy gastar.' : 'Comparo com o que medi desde a última vez e ajusto as estimativas.'} O saldo fica em console.anthropic.com › Plans &amp; Billing.</p>
+    <div class="cfg-form-acoes"><button class="btn primario pequeno">Salvar</button><button type="button" class="link" data-cfg-form="">Cancelar</button></div>
+  </form>`;
+}
+
+function cfgGrafico(dias) {
+  const W = 330, H = 120, base = 100, n = dias.length || 1, larg = W / n;
+  const max = Math.max(0.01, ...dias.map((d) => Math.max(Number(d.usd) || 0, Number(d.oficial) || 0)));
+  const hoje = dias.at(-1)?.dia;
+  const barras = dias.map((d, i) => {
+    const v = Number(d.usd) || 0, h = v > 0 ? Math.max(2, (v / max) * (base - 8)) : 0;
+    const of = d.oficial !== null && d.oficial !== undefined ? Number(d.oficial) : null;
+    return `<g class="cfg-dia${d.dia === hoje ? ' hoje' : ''}${Cfg.sel === d.dia ? ' sel' : ''}" data-cfg-dia="${d.dia}">
+      <rect x="${i * larg}" y="0" width="${larg}" height="${base}" class="alvo"/>
+      ${h ? `<rect x="${(i * larg + larg * 0.18).toFixed(1)}" y="${(base - h).toFixed(1)}" width="${(larg * 0.64).toFixed(1)}" height="${h.toFixed(1)}" rx="2" class="barra"/>` : ''}
+      ${of !== null ? `<circle cx="${(i * larg + larg / 2).toFixed(1)}" cy="${(base - Math.max(2, (of / max) * (base - 8))).toFixed(1)}" r="2.4" class="oficial"/>` : ''}
+    </g>`;
+  }).join('');
+  const rotulos = dias.map((d, i) => (i % 7 === 2 || i === n - 1) ? `<text x="${(i * larg + larg / 2).toFixed(1)}" y="${H - 4}" class="eixo">${i === n - 1 ? 'hoje' : diaCurto(d.dia)}</text>` : '').join('');
+  const sel = dias.find((d) => d.dia === Cfg.sel);
+  return `<div class="cfg-grafico">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto por dia nos últimos 30 dias">
+      <line x1="0" x2="${W}" y1="${base}" y2="${base}" class="base"/>
+      <text x="${W}" y="10" class="eixo topo">${usd(max)}</text>
+      ${barras}${rotulos}
+    </svg>
+    <p class="cfg-grafico-leg">${sel ? `<b>${diaCurto(sel.dia)}</b>: ${usd(sel.usd)} medido em ${sel.chamadas} chamada(s)${sel.oficial !== null && sel.oficial !== undefined ? ` · oficial ${usd(sel.oficial)}` : ''}` : 'Toque numa barra para ver o dia.'}${dias.some((d) => d.oficial !== null && d.oficial !== undefined) ? ' <span class="leg-of">● oficial</span>' : ''}</p>
+  </div>`;
+}
+
+function cfgConsumo(p) {
+  const per = p.periodos, cob = p.cobertura || {};
+  const rotinas = [...p.por_rotina];
+  const totalDia = rotinas.reduce((a, r) => a + (Number(r.gasto_dia) || 0), 0) + (Number(cob.outras_dia) || 0);
+  const linhas = rotinas.map((r) => ({ nome: r.nome, dia: Number(r.gasto_dia) || 0, ch: r.chamadas7, bu: Number(r.buscas7) || 0 }));
+  if (cob.outras_dia > 0) linhas.push({ nome: 'Funções ainda não medidas (estimado)', dia: Number(cob.outras_dia), ch: null, bu: 0, outras: true });
+  linhas.sort((a, b) => b.dia - a.dia);
+  const medidas = (cob.medidas || []).length, total = medidas + (cob.nao_medidas || []).length;
+  return `
+  ${cfgHero(p)}
+  <div class="olho-kpis cfg-kpis">
+    <div class="olho-kpi"><b>${usd(per.hoje.usd)}</b><small>hoje · ${per.hoje.chamadas} chamadas</small></div>
+    <div class="olho-kpi"><b>${usd(per.d7.usd)}</b><small>7 dias · ${per.d7.buscas} buscas web</small></div>
+    <div class="olho-kpi"><b>${usd(per.d30.usd)}</b><small>30 dias${p.oficial.total_30d ? ` · oficial ${usd(p.oficial.total_30d)}` : ''}</small></div>
+  </div>
+  <h2 class="secao">Gasto por dia</h2>
+  ${cfgGrafico(p.por_dia)}
+  <h2 class="secao">Para onde vai o crédito</h2>
+  ${linhas.length ? `<ul class="cfg-rotinas">${linhas.map((l) => `
+    <li class="${l.outras ? 'outras' : ''}">
+      <div class="cfg-rot-cab"><b>${esc(l.nome)}</b><span>${usd(l.dia)}/dia</span></div>
+      <div class="cfg-rot-barra"><i style="width:${totalDia ? Math.max(2, (l.dia / totalDia) * 100).toFixed(1) : 0}%"></i></div>
+      <small>${totalDia ? Math.round((l.dia / totalDia) * 100) : 0}% do gasto${l.ch !== null ? ` · ${l.ch} chamadas em 7 dias` : ''}${l.bu ? ` · ${l.bu} buscas na web` : ''}</small>
+    </li>`).join('')}</ul>` : '<p class="olho-aviso">Ainda não há consumo medido. Os números aparecem assim que o Dimy fizer as próximas leituras.</p>'}
+  <p class="campo-dica cfg-nota">Medição real das chamadas (tokens e buscas que a Anthropic devolve), com preços de tabela. ${medidas < total
+    ? `Parte das funções ainda não grava o consumo; cada uma passa a gravar quando for atualizada.${cob.fator ? ` O total já está corrigido pela ${cob.origem === 'oficial' ? 'conta oficial' : 'conferência de saldo'} (×${String(cob.fator).replace('.', ',')}).` : ' Para o total exato, use “Conferir saldo” de vez em quando.'}`
+    : 'Todas as funções estão sendo medidas.'}</p>
+  ${p.por_modelo.length ? `<div class="cfg-modelos">${p.por_modelo.map((m) => `<span><b>${esc(m.modelo)}</b> ${usd(m.usd)} · ${m.chamadas} chamadas</span>`).join('')}</div>` : ''}
+  <button class="btn claro largo cfg-ir-economia" data-cfg-aba-ir="economia">Reduzir o consumo →</button>`;
+}
+
+function cfgEconomia(p) {
+  const presets = p.presets.map((m) => `
+    <button class="cfg-preset${p.preset === m.id ? ' on' : ''}" data-cfg-preset="${m.id}">
+      <b>${esc(m.nome)}</b><small>${esc(m.descricao)}</small>
+      <span>${m.ritmo_dia !== null ? `≈ ${usd(m.ritmo_dia)}/dia` : 'estimativa após 3 h de uso'}</span>${m.dias !== null && m.dias !== undefined ? `<em>dura ${duracao(m.dias)}</em>` : ''}
+    </button>`).join('');
+  const tempo = p.temporizadores.map((t) => `
+    <div class="cfg-tempo">
+      <div class="cfg-tempo-cab"><b>${esc(t.nome)}</b>${t.gasto_dia ? `<span>${usd(t.gasto_dia)}/dia</span>` : ''}</div>
+      <p>${esc(t.descricao)}</p>
+      <select data-cfg-tempo="${t.rotina}" aria-label="Temporizador: ${esc(t.nome)}">
+        ${t.atual === 'personalizado' ? '<option value="" selected>Personalizado (ajustado à mão)</option>' : ''}
+        ${t.opcoes.map((o) => `<option value="${o.id}" ${t.atual === o.id ? 'selected' : ''}>${esc(o.rotulo)}${o.id === t.padrao ? ' (padrão)' : ''}${o.estimativa_dia !== null && o.estimativa_dia !== undefined && o.id !== t.atual ? ` · ≈ ${usd(o.estimativa_dia)}/dia` : ''}</option>`).join('')}
+      </select>
+    </div>`).join('');
+  return `
+  <p class="olho-aviso">Espaçar as rotinas é o jeito mais simples de o crédito durar mais. Cada mudança vale na hora.</p>
+  <h2 class="secao">Modo de uso</h2>
+  <div class="cfg-presets">${presets}</div>
+  ${p.preset === 'personalizado' ? '<p class="campo-dica">Agora: personalizado (escolhas abaixo).</p>' : ''}
+  <h2 class="secao">Temporizadores</h2>
+  <div class="cfg-tempos">${tempo}</div>
+  <p class="campo-dica cfg-nota">Conversa com o Dimy, atendimento, agendamento e memória não têm temporizador: só gastam quando chega mensagem ou quando você usa. As estimativas comparam com o gasto medido nos últimos 7 dias.</p>`;
+}
+
+function cfgAlertas(p) {
+  const a = p.alertas, o = p.oficial;
+  const num = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
+  return `
+  <form id="cfg-alertas" class="cfg-form">
+    <h2 class="secao">Avisos no celular</h2>
+    <div class="ajustes">
+      <label class="campo"><span>Avisar quando o saldo estimado ficar abaixo de (US$)</span><input name="alerta_saldo_usd" inputmode="decimal" value="${num(a.saldo_usd)}"></label>
+      <label class="campo"><span>Avisar quando faltarem (dias) para acabar</span><input name="alerta_dias" inputmode="numeric" value="${num(a.dias)}"></label>
+      <label class="campo"><span>Avisar se o gasto do dia passar de (US$) — vazio = não avisar</span><input name="alerta_dia_usd" inputmode="decimal" value="${num(a.dia_usd)}" placeholder="ex.: 3,00"></label>
+      <label class="linha-switch"><span><b>Economia automática</b><small>Se o saldo estimado cair abaixo do limite, eu passo sozinho para o modo Econômico e te aviso.</small></span>
+        <input type="checkbox" name="economia_auto" class="switch" ${a.economia_auto ? 'checked' : ''}></label>
+      <label class="campo"><span>Limite da economia automática (US$)</span><input name="economia_auto_usd" inputmode="decimal" value="${num(a.economia_auto_usd)}"></label>
+      <button class="btn primario">Salvar avisos</button>
+      <p class="campo-dica">Também aviso na hora se a Anthropic recusar as chamadas por falta de crédito.</p>
+    </div>
+  </form>
+  <h2 class="secao">Saldo da conta</h2>
+  <div class="ajustes">
+    <p class="dica">${p.saldo.informado !== null && p.saldo.informado !== undefined ? `Informado: <b>${usd(p.saldo.informado)}</b> em ${quando(p.saldo.informado_em)}. Desde então: ${usd(p.saldo.gasto_desde)}.` : 'Você ainda não informou o saldo.'} A Anthropic não mostra o saldo para aplicativos; ele fica em console.anthropic.com › Plans &amp; Billing.</p>
+    <div class="cfg-hero-acoes"><button class="btn pequeno" data-cfg-form="recarga">Recarreguei</button><button class="btn pequeno claro" data-cfg-form="conferir">Conferir saldo</button></div>
+    <div id="cfg-form-saldo"></div>
+    ${(p.cobertura?.conferencias || []).length ? `<ul class="cfg-conf">${p.cobertura.conferencias.slice().reverse().map((c) => `<li>${quando(c.em)}: ${usd(c.agora)}${c.fator ? ` · gasto real ${usd((c.antes ?? 0) - c.agora)} vs medido ${usd(c.medido)}` : ''}</li>`).join('')}</ul>` : ''}
+  </div>
+  <h2 class="secao">Conta oficial (opcional)</h2>
+  <div class="ajustes">
+    <p class="dica">${o.ativo ? `Ligado. O custo oficial de cada dia aparece no gráfico${o.atualizado_em ? ` (atualizado ${quando(o.atualizado_em)})` : ''}.` : 'Com uma chave de administrador da Anthropic, eu trago o custo oficial de cada dia e acerto as estimativas sozinho.'}${o.erro ? ` <span class="erro-txt">Último erro: ${esc(o.erro)}</span>` : ''}</p>
+    <form id="cfg-chave" class="cfg-chave">
+      <input name="chave" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${o.ativo ? 'Chave guardada' : 'sk-ant-admin…'}">
+      <button class="btn claro">${o.ativo ? 'Trocar' : 'Ligar'}</button>
+    </form>
+    ${o.ativo ? '<button class="link perigo" data-cfg-tirar-chave>Desligar e apagar a chave</button>' : ''}
+    <p class="campo-dica">A chave fica no cofre do servidor, nunca no celular. Só contas com organização criam essa chave: console.anthropic.com › Settings › Admin keys.</p>
+  </div>
+  <p class="campo-dica cfg-nota">Preços usados (US$ por milhão de tokens): ${(p.precos || []).map((x) => `${x.modelo.replace('claude-', '')}: entrada ${String(x.entrada).replace('.', ',')}, saída ${String(x.saida).replace('.', ',')}`).join(' · ')} · busca na web: US$ 10 por mil.</p>`;
+}
+
+$('#cfg-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-cfg-aba]'); if (b) ir(`config/${b.dataset.cfgAba}`); });
+$('#v-config').addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-cfg-form],[data-cfg-preset],[data-cfg-dia],[data-cfg-aba-ir],[data-cfg-tirar-chave]');
+  if (!el) return;
+  const d = el.dataset;
+  if (d.cfgAbaIr) { ir(`config/${d.cfgAbaIr}`); return; }
+  if (d.cfgDia) { Cfg.sel = Cfg.sel === d.cfgDia ? null : d.cfgDia; const g = $('.cfg-grafico'); if (g) g.outerHTML = cfgGrafico(Cfg.p.por_dia); return; }
+  if (d.cfgForm !== undefined) {
+    e.preventDefault();
+    const alvo = el.closest('.cfg-hero, .ajustes')?.querySelector('#cfg-form-saldo') || $('#cfg-form-saldo');
+    if (alvo) { alvo.innerHTML = d.cfgForm ? cfgFormSaldo(d.cfgForm) : ''; alvo.querySelector('input')?.focus(); }
+    return;
+  }
+  try {
+    if (d.cfgPreset) {
+      if (Cfg.p.preset === d.cfgPreset) return;
+      document.querySelectorAll('.cfg-preset').forEach((b) => (b.disabled = true));
+      Cfg.p = await api('/consumo/preset', { metodo: 'POST', corpo: { preset: d.cfgPreset } });
+      aviso(`Modo ${Cfg.p.presets.find((m) => m.id === d.cfgPreset)?.nome ?? ''} ligado.`); desenharConfig(); return;
+    }
+    if (d.cfgTirarChave !== undefined) {
+      el.disabled = true;
+      Cfg.p = await api('/consumo/chave-admin', { metodo: 'POST', corpo: { chave: '' } });
+      aviso('Conta oficial desligada e chave apagada.'); desenharConfig();
+    }
+  } catch (err) { aviso(err.message); desenharConfig(); }
+});
+$('#v-config').addEventListener('change', async (e) => {
+  const s = e.target.closest('[data-cfg-tempo]');
+  if (!s || !s.value) return;
+  s.disabled = true;
+  try {
+    Cfg.p = await api('/consumo/temporizador', { metodo: 'POST', corpo: { rotina: s.dataset.cfgTempo, opcao: s.value } });
+    aviso('Temporizador atualizado.'); desenharConfig();
+  } catch (err) { aviso(err.message); desenharConfig(); }
+});
+$('#v-config').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target, b = f.querySelector('button:not([type=button])');
+  if (b) b.disabled = true;
+  try {
+    if (f.dataset.cfgSaldo) {
+      const v = f.querySelector('input').value.trim();
+      const chave = f.dataset.cfgSaldo === 'recarga' ? 'saldo_usd' : 'conferir_saldo_usd';
+      Cfg.p = await api('/consumo/config', { metodo: 'POST', corpo: { [chave]: v } });
+      aviso(f.dataset.cfgSaldo === 'recarga' ? 'Saldo registrado. Agora eu acompanho o gasto.' : 'Saldo conferido. Estimativas ajustadas.');
+    } else if (f.id === 'cfg-alertas') {
+      const v = new FormData(f);
+      Cfg.p = await api('/consumo/config', { metodo: 'POST', corpo: {
+        alerta_saldo_usd: v.get('alerta_saldo_usd'), alerta_dias: v.get('alerta_dias'), alerta_dia_usd: v.get('alerta_dia_usd'),
+        economia_auto: !!v.get('economia_auto'), economia_auto_usd: v.get('economia_auto_usd') } });
+      aviso('Avisos salvos.');
+    } else if (f.id === 'cfg-chave') {
+      const chave = new FormData(f).get('chave');
+      if (!String(chave || '').trim()) { aviso('Cole a chave de administrador.'); if (b) b.disabled = false; return; }
+      Cfg.p = await api('/consumo/chave-admin', { metodo: 'POST', corpo: { chave } });
+      aviso('Conta oficial ligada.');
+    }
+    desenharConfig();
+  } catch (err) { aviso(err.message); if (b) b.disabled = false; }
 });
