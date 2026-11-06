@@ -2,7 +2,7 @@
 
 Backend e regras completas: repositório `micheldersj-hub/segundo-c-rebro` (`CLAUDE.md`, `docs/MAPA.md`, `docs/ESTADO.md`).
 
-- Arquivos: `index.html` (telas `section.vista`), `app.js` (~4k linhas), `exportar.js` (serviços de PDF/CSV/telefone/e-mail/compartilhar, sem DOM, carregado sob demanda), `vendor/` (jsPDF 2.5.1 oficial, com SRI), `style.css`, `sw.js`.
+- Arquivos: `index.html` (telas `section.vista`), `app.js` (~4k linhas), `exportar.js` (serviços de PDF/CSV/telefone/e-mail/compartilhar, sem DOM, carregado sob demanda), `vendor/` (jsPDF 4.2.1 oficial, com SRI), `style.css`, `sw.js`.
 - Exportação: não volte a importar bibliotecas UMD pela CDN com `+esm` (foi a causa do `autoTable is not a function`). Testes: `node --test tools/ui/exportar.test.mjs` e `tools/ui/interacao_envio.mjs`.
 - O app confere a versão ao voltar para a tela (`verificarVersao`, lê o `CACHE` do sw.js) e recarrega sozinho.
 - Ache por âncora, não leia tudo: seções `grep -n '^// [A-Z]' app.js`; telas `#v-<nome>`; rota em `function rota()`.
