@@ -1273,3 +1273,16 @@ body.com-voz { overflow: hidden; }
 :root.teclado .painel-resposta, :root.teclado .compositor { bottom: env(safe-area-inset-bottom); }
 :root.teclado .anexo-chip { bottom: calc(70px + env(safe-area-inset-bottom)); }
 :root.teclado #app { padding-bottom: 12px; }
+
+/* Escolha de contato na folha de envio (v43) */
+.escolhe-contato { gap: 8px; }
+.contato-lista { list-style: none; margin: 0; padding: 4px; max-height: 38vh; overflow-y: auto; border: 1px solid var(--linha, rgba(127,127,127,.25)); border-radius: 14px; background: var(--superficie-2); -webkit-overflow-scrolling: touch; }
+.contato-op { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: 10px; background: none; color: inherit; text-align: left; min-height: 48px; }
+.contato-op:active:not([disabled]), .contato-op:focus-visible { background: var(--azul-claro); outline: none; }
+.contato-op[disabled] { opacity: .5; }
+.contato-op .pessoa-corpo { display: grid; min-width: 0; }
+.contato-op .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contato-op .d { font-size: 13px; color: var(--tinta-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contato-escolhido { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--azul-claro); color: var(--azul); }
+.contato-escolhido[hidden], .contato-busca[hidden], .contato-lista[hidden] { display: none; }
+.contato-escolhido .link { color: var(--azul); font-weight: 700; text-decoration: none; padding: 4px; }

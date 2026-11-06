@@ -27,7 +27,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v42';
+const VERSAO = 'v43';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -499,14 +499,55 @@ function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar' }) {
       const radio = c.tipo === 'escolha';
       return `<div class="campo"><span>${c.rotulo}</span><div class="escolha">${c.opcoes.map((o) => `<label><input type="${radio ? 'radio' : 'checkbox'}" name="${radio ? c.nome : o.nome}" value="${esc(o.valor ?? '1')}" ${o.marcado ? 'checked' : ''}><span>${esc(o.texto)}</span></label>`).join('')}</div></div>`;
     }
+    if (c.tipo === 'contato') {
+      return `<div class="campo escolhe-contato" data-campo-contato><span>${c.rotulo}</span>
+        <input type="hidden" name="${c.nome}" value="">
+        <div class="contato-escolhido" hidden></div>
+        <input type="search" class="contato-busca" placeholder="Buscar pelo nome ou número" autocomplete="off" aria-label="Buscar contato">
+        <ul class="contato-lista" role="listbox"><li class="busca-vazio">Carregando seus contatos…</li></ul>
+      </div>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
+    }
     return `<label class="campo"><span>${c.rotulo}</span><input name="${c.nome}" type="${c.tipoInput || 'text'}" value="${esc(c.valor || '')}" placeholder="${esc(c.placeholder || '')}" ${c.obrigatorio ? 'required' : ''} autocomplete="${c.autocomplete || 'off'}" ${c.tipoInput === 'email' ? 'autocapitalize="off" inputmode="email"' : ''}></label>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
   }).join('');
   $('#folha-erro').textContent = '';
   $('#folha-apagar').hidden = !apagar;
   $('#folha-apagar').onclick = apagar ? async () => { if (confirm('Apagar mesmo?')) { try { await apagar(); fecharFolha(); } catch (err) { $('#folha-erro').textContent = err.message; } } } : null;
   folhaAcao = salvar;
+  const cc = $('#folha-campos [data-campo-contato]'); if (cc) montarEscolhaContato(cc);
   $('#folha').hidden = false;
   requestAnimationFrame(() => $('#folha').classList.add('aberta'));
+}
+// Escolha de contato na folha: lista da sua agenda do WhatsApp com busca; tocar escolhe (ou digite um número).
+const dentro24h = (c) => c.last_in_at && Date.now() - Date.parse(c.last_in_at) < 24 * 3600e3;
+async function montarEscolhaContato(el) {
+  const oculto = el.querySelector('input[type=hidden]'), busca = el.querySelector('.contato-busca'), ul = el.querySelector('.contato-lista'), esc1 = el.querySelector('.contato-escolhido');
+  let todos = Busca.todos;
+  const desenhar = () => {
+    const q = busca.value.trim(), ws = semAcentoCli(q).split(/\s+/).filter(Boolean), dig = q.replace(/\D/g, '');
+    const lista = todos.filter((c) => !q || (dig.length >= 3 && c.wa_id.includes(dig)) || (ws.length && ws.every((w) => semAcentoCli(`${c.name || ''} ${c.empresa || ''}`).includes(w))))
+      .sort((a, b) => (dentro24h(b) - dentro24h(a)) || (Date.parse(b.last_in_at || b.last_seen || 0) - Date.parse(a.last_in_at || a.last_seen || 0)));
+    const numero = dig.length >= 10 && !lista.some((c) => c.wa_id.endsWith(dig.slice(-8)))
+      ? `<li><button type="button" class="contato-op" data-wa="${esc(dig)}" data-nome="${esc(foneBonito(dig))}"><span class="pessoa-corpo"><span class="t">Enviar para ${esc(foneBonito(dig))}</span><span class="d">Número digitado</span></span></button></li>` : '';
+    ul.innerHTML = numero + (lista.length ? lista.slice(0, 60).map((c) => {
+      const ok = dentro24h(c);
+      return `<li><button type="button" class="contato-op" data-wa="${esc(c.wa_id)}" data-nome="${esc(nomeDe(c))}" ${ok ? '' : 'disabled'}>${avatar(c)}<span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}</span><span class="d">${ok ? esc(nomeValido(c.name) ? foneBonito(c.wa_id) : 'Pode receber agora') : 'Precisa te escrever antes (regra das 24 h)'}</span></span></button></li>`;
+    }).join('') : (numero ? '' : `<li class="busca-vazio">${q ? `Ninguém com "${esc(q)}".` : 'Nenhum contato ainda.'}</li>`));
+  };
+  const escolher = (wa, nome) => {
+    oculto.value = wa;
+    esc1.innerHTML = `<span><b>${esc(nome)}</b></span><button type="button" class="link" data-trocar>Trocar</button>`;
+    esc1.hidden = false; busca.hidden = true; ul.hidden = true;
+  };
+  ul.addEventListener('click', (e) => { const b = e.target.closest('.contato-op'); if (b && !b.disabled) escolher(b.dataset.wa, b.dataset.nome); });
+  esc1.addEventListener('click', (e) => { if (e.target.closest('[data-trocar]')) { oculto.value = ''; esc1.hidden = true; busca.hidden = false; ul.hidden = false; busca.focus(); } });
+  busca.addEventListener('input', desenhar);
+  busca.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = ul.querySelector('.contato-op:not([disabled])'); if (b) b.click(); } });
+  if (todos.length) desenhar();
+  try {
+    const { contatos } = await api('/contatos');
+    todos = contatos.filter((c) => c.name !== '[teste removido]' && new Date(c.last_seen).getFullYear() > 2001);
+    if (!oculto.value) desenhar();
+  } catch { if (!todos.length) ul.innerHTML = '<li class="busca-vazio">Não consegui carregar seus contatos. Digite o número acima.</li>'; }
 }
 function fecharFolha() { $('#folha').classList.remove('aberta'); setTimeout(() => ($('#folha').hidden = true), 220); }
 $('#folha').addEventListener('click', (e) => { if (e.target.closest('[data-fechar]')) fecharFolha(); });
@@ -2557,8 +2598,18 @@ const nomeArq = (s) => String(s || 'oraculo').normalize('NFD').replace(/[̀-ͯ]/
 let libPdf = null;
 async function carregarPdf() {
   if (!libPdf) {
-    const [{ jsPDF }, at] = await Promise.all([import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm'), import('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm')]);
-    libPdf = { jsPDF, autoTable: at.default || at.autoTable };
+    const at = await import('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm');
+    const m1 = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
+    const jsPDF = m1.jsPDF || m1.default?.jsPDF || m1.default;
+    // O pacote da tabela chega em formatos diferentes conforme a CDN: procura a função onde ela estiver.
+    let autoTable = [at.autoTable, at.default, at.default?.default, at.default?.autoTable].find((f) => typeof f === 'function');
+    if (!autoTable) {
+      const ap = at.applyPlugin || at.default?.applyPlugin;
+      if (typeof ap === 'function') ap(jsPDF);
+      if (typeof jsPDF?.API?.autoTable === 'function') autoTable = (doc, o) => doc.autoTable(o);
+    }
+    if (typeof jsPDF !== 'function' || !autoTable) throw new Error('o gerador de PDF não carregou. Tente o CSV ou tente de novo em instantes.');
+    libPdf = { jsPDF, autoTable };
   }
   return libPdf;
 }
@@ -2677,11 +2728,12 @@ document.addEventListener('click', async (e) => {
     campos: [
       email
         ? { rotulo: 'E-mail de quem recebe', nome: 'para', tipoInput: 'email', valor: guardado.ler('cerebro-ultimo-email') || '', placeholder: 'nome@empresa.com.br', obrigatorio: true, dica: 'Sai do seu Gmail, com os arquivos em anexo.' }
-        : { rotulo: 'Contato ou número', nome: 'para', valor: '', placeholder: 'Ex.: Bruno ou 31 99999-0000', obrigatorio: true, dica: 'Sai do seu WhatsApp comercial. A Meta só deixa enviar para quem te escreveu nas últimas 24 h.' },
+        : { tipo: 'contato', rotulo: 'Para quem', nome: 'para', dica: 'Sai do seu WhatsApp comercial. A Meta só deixa enviar para quem te escreveu nas últimas 24 h; esses aparecem primeiro.' },
       { tipo: 'marcas', rotulo: 'Arquivos', opcoes: [{ nome: 'pdf', texto: 'PDF', marcado: true }, { nome: 'csv', texto: 'CSV (planilha)', marcado: email }] },
       { rotulo: 'Mensagem', nome: 'texto', valor: x.texto },
     ],
     salvar: async (f) => {
+      if (!email && !f.para) throw new Error('Escolha o contato na lista.');
       if (!f.pdf && !f.csv) throw new Error('Escolha pelo menos um arquivo.');
       const arquivos = [];
       if (f.pdf) arquivos.push({ nome: `${x.base}.pdf`, tipo: 'application/pdf', base64: await paraBase64(await x.pdf()) });
