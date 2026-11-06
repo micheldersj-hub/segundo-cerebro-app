@@ -1286,3 +1286,28 @@ body.com-voz { overflow: hidden; }
 .contato-escolhido { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--azul-claro); color: var(--azul); }
 .contato-escolhido[hidden], .contato-busca[hidden], .contato-lista[hidden] { display: none; }
 .contato-escolhido .link { color: var(--azul); font-weight: 700; text-decoration: none; padding: 4px; }
+
+/* Exportação v44: arquivo pronto, etapas do WhatsApp, situação do número, avisos neutros */
+#folha-erro.neutro { color: var(--tinta-suave); }
+.escolha input:focus-visible + span { outline: 2px solid var(--mar); outline-offset: 2px; }
+.escolha.duas span { font-size: 13.5px; padding: 11px 6px; }
+.contato-busca { width: 100%; }
+.contato-status { margin: 0; font-size: 13px; color: var(--alerta); }
+.contato-status.ok { color: var(--verde); font-weight: 600; }
+.contato-escolhido .pessoa-corpo { display: grid; min-width: 0; }
+.contato-escolhido .t { font-weight: 700; }
+.contato-escolhido .d { font-size: 13px; opacity: .85; }
+.contato-op .av { font-weight: 800; }
+.arq-cartao { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--superficie-2); min-width: 0; }
+.arq-cartao .pessoa-corpo { display: grid; min-width: 0; }
+.arq-cartao .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arq-cartao .d { font-size: 13px; color: var(--tinta-suave); }
+.arq-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--superficie); }
+.arq-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.arq-ic.pdf { color: var(--alerta); } .arq-ic.csv { color: var(--verde); }
+.wa-etapas { margin: 0; padding: 0 0 0 20px; display: grid; gap: 4px; font-size: 13.5px; color: var(--tinta-fraca); }
+.wa-etapas li.atual { color: var(--tinta); font-weight: 700; }
+.wa-etapas li.feito { color: var(--verde); text-decoration: line-through; }
+.exp-btn.ocupado { opacity: .7; }
+.exp-btn[disabled] { cursor: progress; }
+.campo-dica .link { padding: 0; }

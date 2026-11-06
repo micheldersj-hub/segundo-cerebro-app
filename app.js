@@ -27,7 +27,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v43';
+const VERSAO = 'v44';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -80,7 +80,7 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   const res = await fetch(base + caminho, { method: metodo, headers, body });
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
-  if (!res.ok) throw new Error(dados.erro || `Erro ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(dados.erro || `Erro ${res.status}`), { codigo: dados.codigo, status: res.status });
   return dados;
 }
 
@@ -481,12 +481,15 @@ $('#cal-hoje').addEventListener('click', () => { const h = diaISO(new Date()); A
 // ---------------------------------------------------------------------------
 const IC_CAL = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
 const IC_REL = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
-let folhaAcao = null;
+let folhaAcao = null, folhaTimer = 0;
 
 let folhaBotao = 'Salvar';
-function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar' }) {
+// Folha de baixo genérica. Campos: data-hora, escolha (rádio), marcas (caixas), contato (lista com busca), html (bloco pronto), texto/e-mail/textarea.
+// salvar(dados) pode devolver 'manter' para a folha continuar aberta (fluxos em duas etapas). aoAbrir(el) liga eventos extras.
+function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar', ocupado, aoAbrir }) {
+  clearTimeout(folhaTimer);
   $('#folha-titulo').textContent = titulo;
-  folhaBotao = botao; $('#folha-salvar').textContent = botao;
+  folhaBotao = botao; $('#folha-salvar').textContent = botao; $('#folha-salvar').dataset.ocupado = ocupado || (botao === 'Salvar' ? 'Salvando…' : 'Enviando…');
   $('#folha-campos').innerHTML = campos.map((c) => {
     if (c.tipo === 'data-hora') {
       return `<div class="linha-campos">
@@ -497,68 +500,90 @@ function abrirFolha({ titulo, campos, salvar, apagar, botao = 'Salvar' }) {
     }
     if (c.tipo === 'escolha' || c.tipo === 'marcas') {
       const radio = c.tipo === 'escolha';
-      return `<div class="campo"><span>${c.rotulo}</span><div class="escolha">${c.opcoes.map((o) => `<label><input type="${radio ? 'radio' : 'checkbox'}" name="${radio ? c.nome : o.nome}" value="${esc(o.valor ?? '1')}" ${o.marcado ? 'checked' : ''}><span>${esc(o.texto)}</span></label>`).join('')}</div></div>`;
+      return `<div class="campo"><span>${c.rotulo}</span><div class="escolha${c.classe ? ` ${c.classe}` : ''}">${c.opcoes.map((o) => `<label><input type="${radio ? 'radio' : 'checkbox'}" name="${radio ? c.nome : o.nome}" value="${esc(o.valor ?? '1')}" ${o.marcado ? 'checked' : ''}><span>${esc(o.texto)}</span></label>`).join('')}</div></div>${c.dica ? `<p class="campo-dica" ${c.idDica ? `id="${c.idDica}"` : ''}>${esc(c.dica)}</p>` : ''}`;
     }
+    if (c.tipo === 'html') return c.html;
     if (c.tipo === 'contato') {
       return `<div class="campo escolhe-contato" data-campo-contato><span>${c.rotulo}</span>
-        <input type="hidden" name="${c.nome}" value="">
+        <input type="hidden" name="${c.nome}" value="${esc(c.valor || '')}" data-nome-escolhido="${esc(c.nomeValor || '')}">
         <div class="contato-escolhido" hidden></div>
-        <input type="search" class="contato-busca" placeholder="Buscar pelo nome ou número" autocomplete="off" aria-label="Buscar contato">
+        <input type="text" name="busca_${c.nome}" class="contato-busca" placeholder="Nome ou número com DDD" autocomplete="off" autocapitalize="off" enterkeyhint="done" aria-label="Contato ou número">
+        <p class="contato-status" aria-live="polite" hidden></p>
         <ul class="contato-lista" role="listbox"><li class="busca-vazio">Carregando seus contatos…</li></ul>
       </div>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
     }
+    if (c.tipoInput === 'textarea') return `<label class="campo"><span>${c.rotulo}</span><textarea name="${c.nome}" rows="${c.linhas || 3}" placeholder="${esc(c.placeholder || '')}">${esc(c.valor || '')}</textarea></label>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
     return `<label class="campo"><span>${c.rotulo}</span><input name="${c.nome}" type="${c.tipoInput || 'text'}" value="${esc(c.valor || '')}" placeholder="${esc(c.placeholder || '')}" ${c.obrigatorio ? 'required' : ''} autocomplete="${c.autocomplete || 'off'}" ${c.tipoInput === 'email' ? 'autocapitalize="off" inputmode="email"' : ''}></label>${c.dica ? `<p class="campo-dica">${esc(c.dica)}</p>` : ''}`;
   }).join('');
-  $('#folha-erro').textContent = '';
+  folhaMsg('');
   $('#folha-apagar').hidden = !apagar;
-  $('#folha-apagar').onclick = apagar ? async () => { if (confirm('Apagar mesmo?')) { try { await apagar(); fecharFolha(); } catch (err) { $('#folha-erro').textContent = err.message; } } } : null;
+  $('#folha-apagar').onclick = apagar ? async () => { if (confirm('Apagar mesmo?')) { try { await apagar(); fecharFolha(); } catch (err) { folhaMsg(err.message); } } } : null;
   folhaAcao = salvar;
-  const cc = $('#folha-campos [data-campo-contato]'); if (cc) montarEscolhaContato(cc);
   $('#folha').hidden = false;
+  if (aoAbrir) aoAbrir($('#folha-form'));
   requestAnimationFrame(() => $('#folha').classList.add('aberta'));
 }
-// Escolha de contato na folha: lista da sua agenda do WhatsApp com busca; tocar escolhe (ou digite um número).
-const dentro24h = (c) => c.last_in_at && Date.now() - Date.parse(c.last_in_at) < 24 * 3600e3;
-async function montarEscolhaContato(el) {
-  const oculto = el.querySelector('input[type=hidden]'), busca = el.querySelector('.contato-busca'), ul = el.querySelector('.contato-lista'), esc1 = el.querySelector('.contato-escolhido');
+// Mensagem da folha: erro (vermelho) ou aviso neutro (cinza), ex.: "compartilhamento cancelado".
+function folhaMsg(t, neutro = false) { const el = $('#folha-erro'); el.textContent = t || ''; el.classList.toggle('neutro', !!neutro); }
+// Escolha de contato: sua lista do WhatsApp com busca por nome, ou número digitado (salvo ou não), validado e mostrado em formato internacional.
+// opcoes.janela(): true quando só quem escreveu nas últimas 24 h pode ser escolhido (envio pelo número comercial).
+const dentro24h = (c) => !!c.last_in_at && Date.now() - Date.parse(c.last_in_at) < 24 * 3600e3;
+async function montarEscolhaContato(el, X, { janela = () => false, aoMudar = () => {} } = {}) {
+  const oculto = el.querySelector('input[type=hidden]'), busca = el.querySelector('.contato-busca'), ul = el.querySelector('.contato-lista'), esc1 = el.querySelector('.contato-escolhido'), st = el.querySelector('.contato-status');
   let todos = Busca.todos;
+  const status = (t, ok) => { st.hidden = !t; st.textContent = t || ''; st.classList.toggle('ok', !!ok); };
   const desenhar = () => {
-    const q = busca.value.trim(), ws = semAcentoCli(q).split(/\s+/).filter(Boolean), dig = q.replace(/\D/g, '');
-    const lista = todos.filter((c) => !q || (dig.length >= 3 && c.wa_id.includes(dig)) || (ws.length && ws.every((w) => semAcentoCli(`${c.name || ''} ${c.empresa || ''}`).includes(w))))
-      .sort((a, b) => (dentro24h(b) - dentro24h(a)) || (Date.parse(b.last_in_at || b.last_seen || 0) - Date.parse(a.last_in_at || a.last_seen || 0)));
-    const numero = dig.length >= 10 && !lista.some((c) => c.wa_id.endsWith(dig.slice(-8)))
-      ? `<li><button type="button" class="contato-op" data-wa="${esc(dig)}" data-nome="${esc(foneBonito(dig))}"><span class="pessoa-corpo"><span class="t">Enviar para ${esc(foneBonito(dig))}</span><span class="d">Número digitado</span></span></button></li>` : '';
-    ul.innerHTML = numero + (lista.length ? lista.slice(0, 60).map((c) => {
-      const ok = dentro24h(c);
-      return `<li><button type="button" class="contato-op" data-wa="${esc(c.wa_id)}" data-nome="${esc(nomeDe(c))}" ${ok ? '' : 'disabled'}>${avatar(c)}<span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}</span><span class="d">${ok ? esc(nomeValido(c.name) ? foneBonito(c.wa_id) : 'Pode receber agora') : 'Precisa te escrever antes (regra das 24 h)'}</span></span></button></li>`;
-    }).join('') : (numero ? '' : `<li class="busca-vazio">${q ? `Ninguém com "${esc(q)}".` : 'Nenhum contato ainda.'}</li>`));
+    const q = busca.value.trim(), num = X.pareceTelefone(q), dig = q.replace(/\D/g, ''), ws = semAcentoCli(q).split(/\s+/).filter(Boolean), so24 = janela();
+    let opNumero = '';
+    if (num && dig.length >= 3) {
+      const t = X.normalizarTelefone(q);
+      if (t.ok) { status(`Número válido: ${t.exibicao}`, true); if (!todos.some((c) => c.wa_id === t.digitos)) opNumero = `<li><button type="button" class="contato-op" data-wa="${esc(t.digitos)}" data-nome="${esc(t.exibicao)}" data-avulso="1"><span class="av">#</span><span class="pessoa-corpo"><span class="t">Usar ${esc(t.exibicao)}</span><span class="d">${so24 ? 'Número digitado (só se te escreveu nas últimas 24 h)' : 'Número digitado: não precisa estar salvo'}</span></span></button></li>`; }
+      else status(dig.length >= 8 ? t.erro : '', false);
+    } else status('', false);
+    const lista = todos.filter((c) => !q || (num ? dig.length >= 3 && c.wa_id.includes(dig.replace(/^0/, '')) : ws.every((w) => semAcentoCli(`${c.name || ''} ${c.empresa || ''}`).includes(w))))
+      .sort((a, b) => (so24 ? dentro24h(b) - dentro24h(a) : 0) || (Date.parse(b.last_in_at || b.last_seen || 0) - Date.parse(a.last_in_at || a.last_seen || 0)));
+    ul.innerHTML = opNumero + (lista.length ? lista.slice(0, 60).map((c) => {
+      const ok = !so24 || dentro24h(c);
+      return `<li><button type="button" class="contato-op" data-wa="${esc(c.wa_id)}" data-nome="${esc(nomeDe(c))}" ${ok ? '' : 'disabled'}>${avatar(c)}<span class="pessoa-corpo"><span class="t">${esc(nomeDe(c))}</span><span class="d">${ok ? esc(X.foneLegivel(c.wa_id)) : 'Não te escreveu nas últimas 24 h'}</span></span></button></li>`;
+    }).join('') : (opNumero ? '' : `<li class="busca-vazio">${q ? (num ? 'Continue digitando o número com DDD.' : `Ninguém com "${esc(q)}". Digite o número.`) : 'Nenhum contato ainda. Digite o número.'}</li>`));
   };
   const escolher = (wa, nome) => {
-    oculto.value = wa;
-    esc1.innerHTML = `<span><b>${esc(nome)}</b></span><button type="button" class="link" data-trocar>Trocar</button>`;
-    esc1.hidden = false; busca.hidden = true; ul.hidden = true;
+    oculto.value = wa; oculto.dataset.nomeEscolhido = nome;
+    esc1.innerHTML = `<span class="pessoa-corpo"><span class="t">${esc(nome)}</span><span class="d">${esc(X.foneLegivel(wa))}</span></span><button type="button" class="link" data-trocar>Trocar</button>`;
+    esc1.hidden = false; busca.hidden = true; ul.hidden = true; status('', false); aoMudar();
   };
+  const trocar = () => { oculto.value = ''; oculto.dataset.nomeEscolhido = ''; esc1.hidden = true; busca.hidden = false; ul.hidden = false; desenhar(); aoMudar(); };
   ul.addEventListener('click', (e) => { const b = e.target.closest('.contato-op'); if (b && !b.disabled) escolher(b.dataset.wa, b.dataset.nome); });
-  esc1.addEventListener('click', (e) => { if (e.target.closest('[data-trocar]')) { oculto.value = ''; esc1.hidden = true; busca.hidden = false; ul.hidden = false; busca.focus(); } });
-  busca.addEventListener('input', desenhar);
+  esc1.addEventListener('click', (e) => { if (e.target.closest('[data-trocar]')) { trocar(); busca.focus(); } });
+  busca.addEventListener('input', () => {
+    const v = busca.value;   // máscara só quando digita um número no fim do campo (não atrapalha o cursor no meio)
+    if (X.pareceTelefone(v) && busca.selectionStart === v.length && !/\s$/.test(v)) { const m = X.mascaraTelefone(v); if (m && m !== v) busca.value = m; }
+    desenhar();
+  });
   busca.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = ul.querySelector('.contato-op:not([disabled])'); if (b) b.click(); } });
-  if (todos.length) desenhar();
+  el.redesenhar = () => { if (oculto.value) { const c = todos.find((x) => x.wa_id === oculto.value); if (janela() && c && !dentro24h(c)) trocar(); } else desenhar(); };
+  if (oculto.value) escolher(oculto.value, oculto.dataset.nomeEscolhido || X.foneLegivel(oculto.value)); else if (todos.length) desenhar();
   try {
     const { contatos } = await api('/contatos');
     todos = contatos.filter((c) => c.name !== '[teste removido]' && new Date(c.last_seen).getFullYear() > 2001);
-    if (!oculto.value) desenhar();
-  } catch { if (!todos.length) ul.innerHTML = '<li class="busca-vazio">Não consegui carregar seus contatos. Digite o número acima.</li>'; }
+    el.redesenhar();
+  } catch { if (!todos.length && !oculto.value) ul.innerHTML = '<li class="busca-vazio">Não consegui carregar seus contatos agora. Digite o número com DDD.</li>'; }
 }
-function fecharFolha() { $('#folha').classList.remove('aberta'); setTimeout(() => ($('#folha').hidden = true), 220); }
+function fecharFolha() { $('#folha').classList.remove('aberta'); clearTimeout(folhaTimer); folhaTimer = setTimeout(() => ($('#folha').hidden = true), 220); if (folhaFechou) { const f = folhaFechou; folhaFechou = null; f(); } }
+let folhaFechou = null;
 $('#folha').addEventListener('click', (e) => { if (e.target.closest('[data-fechar]')) fecharFolha(); });
 $('#folha-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const b = $('#folha-salvar'); if (b.disabled) return;   // nunca dois envios ao mesmo tempo
   const dados = Object.fromEntries(new FormData(e.currentTarget));
-  const b = $('#folha-salvar'); b.disabled = true; b.textContent = folhaBotao === 'Salvar' ? 'Salvando…' : 'Enviando…';
-  try { await folhaAcao(dados); fecharFolha(); }
-  catch (err) { $('#folha-erro').textContent = err.message; }
+  b.disabled = true; b.textContent = b.dataset.ocupado || 'Enviando…'; folhaMsg('');
+  try { const r = await folhaAcao(dados); if (r !== 'manter') fecharFolha(); }
+  catch (err) { folhaMsg(err.message, !!err.neutro); }
   finally { b.disabled = false; b.textContent = folhaBotao; }
 });
+// Troca o texto do botão principal (ex.: etapa 2 de um envio) e o texto mostrado enquanto trabalha.
+function botaoFolha(t, ocupado) { folhaBotao = t; $('#folha-salvar').textContent = t; if (ocupado) $('#folha-salvar').dataset.ocupado = ocupado; }
+const progressoFolha = (t) => { $('#folha-salvar').textContent = t; };
 
 function proximaHoraCheia() { const d = new Date(Date.now() + 3600e3); d.setMinutes(0); return horaISO(d); }
 
@@ -2577,12 +2602,17 @@ $('#v-dossie').addEventListener('click', async (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Exportar: PDF e CSV do Oráculo (dossiê e empresas por perto), com envio direto por e-mail ou WhatsApp
+// Exportar: PDF e CSV do Oráculo (dossiê e empresas por perto) e envio por e-mail ou WhatsApp.
+// Os serviços (PDF, CSV, telefone, e-mail, compartilhar) ficam em exportar.js, carregado na primeira exportação;
+// aqui ficam só a orquestração e as telas. Os dados são copiados no toque: o arquivo sai exatamente com o que estava na tela.
 // ---------------------------------------------------------------------------
 const IC_PDF = '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6V3Z"/><path d="M15 3v4h4M9 13h6M9 17h4"/></svg>';
 const IC_CSV = '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/></svg>';
 const IC_MAIL = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
-const Exp = {};
+const JSPDF = { url: './vendor/jspdf-2.5.1.umd.min.js', sri: 'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk' };
+let modExp = null;
+const Xp = () => (modExp ??= import(`./exportar.js?${VERSAO}`).catch((e) => { modExp = null; throw Object.assign(new Error('Não consegui abrir a exportação. Confira a internet e tente de novo.'), { codigo: 'modulo', causa: e }); }));
+const Exp = { ocupado: false, rascunho: {} };
 function blocoExportar(alvo, titulo = 'Exportar e enviar') {
   return `<div class="exportar"><p>${titulo}</p><div class="exp-botoes">
     <button class="exp-btn pdf" data-exp="pdf" data-exp-alvo="${alvo}">${IC_PDF}PDF</button>
@@ -2590,70 +2620,14 @@ function blocoExportar(alvo, titulo = 'Exportar e enviar') {
     <button class="exp-btn email" data-exp="email" data-exp-alvo="${alvo}">${IC_MAIL}E-mail</button>
     <button class="exp-btn wa" data-exp="whatsapp" data-exp-alvo="${alvo}">${IC_WHATS}WhatsApp</button></div></div>`;
 }
-// Texto seguro para as fontes padrão do PDF (sem emoji).
-const pdfTxt = (s) => String(s ?? '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/•/g, '-').replace(/…/g, '...').replace(/[^\x00-\xFF]/g, '').replace(/\*/g, '').trim();
-const csvCel = (v) => { const t = String(v ?? '').replace(/\r?\n/g, ' ').trim(); return /[";]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-const csvBlob = (linhas) => new Blob(['﻿' + linhas.map((l) => l.map(csvCel).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-const nomeArq = (s) => String(s || 'oraculo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 50) || 'oraculo';
-let libPdf = null;
-async function carregarPdf() {
-  if (!libPdf) {
-    const at = await import('https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm');
-    const m1 = await import('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm');
-    const jsPDF = m1.jsPDF || m1.default?.jsPDF || m1.default;
-    // O pacote da tabela chega em formatos diferentes conforme a CDN: procura a função onde ela estiver.
-    let autoTable = [at.autoTable, at.default, at.default?.default, at.default?.autoTable].find((f) => typeof f === 'function');
-    if (!autoTable) {
-      const ap = at.applyPlugin || at.default?.applyPlugin;
-      if (typeof ap === 'function') ap(jsPDF);
-      if (typeof jsPDF?.API?.autoTable === 'function') autoTable = (doc, o) => doc.autoTable(o);
-    }
-    if (typeof jsPDF !== 'function' || !autoTable) throw new Error('o gerador de PDF não carregou. Tente o CSV ou tente de novo em instantes.');
-    libPdf = { jsPDF, autoTable };
-  }
-  return libPdf;
-}
-// Documento simples: título, subtítulo, seções com parágrafos, listas e tabelas; quebra de página automática.
-async function novoPdf(titulo, sub) {
-  const { jsPDF, autoTable } = await carregarPdf();
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-  const M = 44, L = doc.internal.pageSize.getWidth() - 2 * M, H = doc.internal.pageSize.getHeight();
-  let y = M;
-  const cabe = (h) => { if (y + h > H - M) { doc.addPage(); y = M; } };
-  doc.setFillColor(109, 40, 217); doc.rect(0, 0, doc.internal.pageSize.getWidth(), 6, 'F');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(18, 22, 28);
-  for (const l of doc.splitTextToSize(pdfTxt(titulo), L)) { cabe(22); doc.text(l, M, y + 14); y += 22; }
-  if (sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(107, 114, 128); doc.text(doc.splitTextToSize(pdfTxt(sub), L), M, y + 6); y += 18 * Math.ceil(pdfTxt(sub).length / 95) + 4; }
-  const api_ = {
-    secao(t) { y += 10; cabe(30); doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(109, 40, 217); doc.text(pdfTxt(t), M, y + 10); y += 20; doc.setTextColor(18, 22, 28); },
-    p(t, { negrito = false, tam = 10.5 } = {}) {
-      const txt = pdfTxt(t); if (!txt) return;
-      doc.setFont('helvetica', negrito ? 'bold' : 'normal'); doc.setFontSize(tam); doc.setTextColor(18, 22, 28);
-      for (const l of doc.splitTextToSize(txt, L)) { cabe(15); doc.text(l, M, y + 10); y += 14; }
-      y += 4;
-    },
-    campo(k, v) { if (v == null || v === '') return; api_.p(`${k}: ${v}`); },
-    lista(arr) { for (const t of (arr || []).filter(Boolean)) { const ls = doc.splitTextToSize(pdfTxt(t), L - 14); doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); ls.forEach((l, k) => { cabe(15); if (!k) doc.text('-', M, y + 10); doc.text(l, M + 12, y + 10); y += 14; }); y += 2; } },
-    tabela(cab, linhas) {
-      autoTable(doc, { startY: y + 4, head: [cab.map(pdfTxt)], body: linhas.map((l) => l.map(pdfTxt)), margin: { left: M, right: M }, styles: { fontSize: 8.5, cellPadding: 4, overflow: 'linebreak' }, headStyles: { fillColor: [109, 40, 217] }, alternateRowStyles: { fillColor: [245, 243, 255] } });
-      y = doc.lastAutoTable.finalY + 10;
-    },
-    blob() {
-      const n = doc.getNumberOfPages();
-      for (let k = 1; k <= n; k++) { doc.setPage(k); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(156, 163, 175); doc.text(`Segundo Cérebro · Oráculo · ${new Date().toLocaleDateString('pt-BR')} · ${k}/${n}`, M, H - 20); }
-      return doc.output('blob');
-    },
-  };
-  return api_;
-}
 
-// Dossiê → PDF / CSV / texto
-async function pdfDossie(d) {
+// Dossiê → PDF / CSV
+async function pdfDossie(d, X, jsPDF) {
   const x = d.dossie || {}, c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null, f = x.financeiro || {}, ab = x.abordagem || {}, e = x.empresa || {}, m = x.mercado || {};
-  const pdf = await novoPdf(`Oráculo · ${d.nome || d.alvo}`, [d.cnpj ? `CNPJ ${fmtCnpj(d.cnpj)}` : '', c?.municipio ? `${c.municipio}/${c.uf}` : '', `Gerado em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join(' · '));
+  const pdf = X.criarDocumento(jsPDF, { titulo: `Oráculo · ${d.nome || d.alvo}`, subtitulo: [d.cnpj ? `CNPJ ${fmtCnpj(d.cnpj)}` : '', c?.municipio ? `${c.municipio}/${c.uf}` : ''].filter(Boolean).join(' · ') });
   pdf.secao(`${(RISCO[d.risco] || RISCO.indefinido).t}`); pdf.p(f.resumo);
   pdf.secao('Resumo'); pdf.p(x.resumo);
-  if (c) { pdf.secao('Cadastro (Receita Federal)'); pdf.tabela(['Campo', 'Valor'], [['Situação', c.situacao], ['Abertura', fmtData(c.abertura)], ['Porte', c.porte], ['Simples', c.simples == null ? '-' : c.simples ? (c.mei ? 'MEI' : 'Sim') : 'Não'], ['Capital social', fmtReais(c.capital_social)], ['Atividade', c.cnae_fiscal_descricao], ['Telefone', c.telefone], ['Endereço', [c.logradouro, c.numero, c.bairro, c.municipio && `${c.municipio}/${c.uf}`].filter(Boolean).join(', ')]].filter(([, v]) => v)); }
+  if (c) { pdf.secao('Cadastro (Receita Federal)'); await pdf.tabela([{ titulo: 'Campo', peso: 1 }, { titulo: 'Valor', peso: 3 }], [['Situação', c.situacao], ['Abertura', fmtData(c.abertura)], ['Porte', c.porte], ['Simples', c.simples == null ? '-' : c.simples ? (c.mei ? 'MEI' : 'Sim') : 'Não'], ['Capital social', fmtReais(c.capital_social)], ['Atividade', c.cnae_fiscal_descricao], ['Telefone', c.telefone], ['Endereço', [c.logradouro, c.numero, c.bairro, c.municipio && `${c.municipio}/${c.uf}`].filter(Boolean).join(', ')]].filter(([, v]) => v)); }
   pdf.secao('Abordagem'); pdf.p(ab.tese); pdf.campo('Oferta', ab.oferta_sugerida); pdf.campo('Gancho', ab.gancho); pdf.campo('Canal e quem', ab.canal); pdf.campo('Momento', ab.momento);
   if (ab.mensagem_whatsapp) { pdf.p('Primeira mensagem:', { negrito: true }); pdf.p(ab.mensagem_whatsapp); }
   if (ab.roteiro?.length) { pdf.p('Roteiro', { negrito: true }); pdf.lista(ab.roteiro); }
@@ -2666,11 +2640,11 @@ async function pdfDossie(d) {
   pdf.secao('Riscos e sinais financeiros'); if (f.sinais?.length) pdf.lista(f.sinais.map((g) => `${TIPO_SINAL[g.tipo] || g.tipo}: ${g.descricao}${g.fonte ? ` (${g.fonte})` : ''}`)); else pdf.p('Nenhum sinal encontrado em fontes públicas.');
   if (x.proximos_passos?.length) { pdf.secao('Próximos passos'); pdf.lista(x.proximos_passos); }
   if (d.fontes?.length) { pdf.secao('Fontes'); pdf.lista(d.fontes); }
-  return pdf.blob();
+  return pdf.finalizar();
 }
-function csvDossie(d) {
+function csvDossie(d, X) {
   const x = d.dossie || {}, c = d.cadastro && !d.cadastro.nao_encontrado ? d.cadastro : null, f = x.financeiro || {}, ab = x.abordagem || {}, e = x.empresa || {}, m = x.mercado || {};
-  const L = [['Seção', 'Campo', 'Valor'], ['Empresa', 'Nome', d.nome || d.alvo], ['Empresa', 'CNPJ', d.cnpj ? fmtCnpj(d.cnpj) : ''], ['Empresa', 'Cidade', c?.municipio ? `${c.municipio}/${c.uf}` : ''],
+  const L = [['Empresa', 'Nome', d.nome || d.alvo], ['Empresa', 'CNPJ', d.cnpj ? fmtCnpj(d.cnpj) : ''], ['Empresa', 'Cidade', c?.municipio ? `${c.municipio}/${c.uf}` : ''],
     ['Empresa', 'Situação', c?.situacao], ['Empresa', 'Abertura', c ? fmtData(c.abertura) : ''], ['Empresa', 'Porte', c?.porte], ['Empresa', 'Simples', c?.simples == null ? '' : c.simples ? 'Sim' : 'Não'], ['Empresa', 'Capital social', c ? fmtReais(c.capital_social) : ''], ['Empresa', 'Atividade', c?.cnae_fiscal_descricao], ['Empresa', 'Telefone', c?.telefone],
     ['Resumo', 'Resumo', x.resumo], ['Risco', 'Nível', (RISCO[d.risco] || RISCO.indefinido).t], ['Risco', 'Resumo', f.resumo],
     ...(f.sinais || []).map((g) => ['Risco', TIPO_SINAL[g.tipo] || g.tipo, `${g.descricao}${g.fonte ? ` (${g.fonte})` : ''}`]),
@@ -2681,68 +2655,198 @@ function csvDossie(d) {
     ...(x.dores_segmento || []).map((g) => ['Dor do segmento', g.dor, g.impacto]),
     ...(x.proximos_passos || []).map((t, k) => ['Próximo passo', String(k + 1), t]),
     ...(d.fontes || []).map((u, k) => ['Fonte', String(k + 1), u])];
-  return csvBlob(L.filter((l) => l[2]));
+  return X.gerarCsv(['Seção', 'Campo', 'Valor'], L.filter((l) => l[2]));
 }
-// Empresas por perto → PDF / CSV
-const linhaPerto = (e) => [e.nome, e.categoria || '', e.distancia_m != null ? fmtDist(e.distancia_m) : '', e.endereco || '', e.telefone || '', e.site || '', e.motivo || ''];
-async function pdfPerto() {
-  const onde = Geo.ultimo?.local;
-  const pdf = await novoPdf(`Empresas perto de ${onde?.bairro || onde?.cidade || 'você'}${Geo.segmento ? ` · ${Geo.segmento}` : ''}`, [onde?.endereco, `${Geo.empresas.length} empresas`, `Gerado em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join(' · '));
-  pdf.tabela(['Empresa', 'Segmento', 'Dist.', 'Endereço', 'Telefone', 'Site', 'Por que abordar'], Geo.empresas.map(linhaPerto));
-  return pdf.blob();
-}
-const csvPerto = () => csvBlob([['Empresa', 'Segmento', 'Distância', 'Endereço', 'Telefone', 'Site', 'Por que abordar', 'Latitude', 'Longitude'], ...Geo.empresas.map((e) => [...linhaPerto(e), e.lat ?? '', e.lng ?? ''])]);
 
-function dadosExport(alvo) {
+// Pacote de exportação: cópia dos dados no momento do toque + geração de cada arquivo uma única vez (reaproveitada no envio).
+async function pacoteExport(alvo) {
+  const X = await Xp();
+  let base, assunto, texto, resumo, gerarPdf, gerarCsv;
   if (alvo === 'dossie') {
-    const d = Oraculo.atual, base = `oraculo-${nomeArq(d.nome || d.alvo)}`;
-    return { base, assunto: `Oráculo · ${d.nome || d.alvo}`, texto: `Segue o dossiê do Oráculo sobre ${d.nome || d.alvo}.${d.dossie?.resumo ? `\n\n${d.dossie.resumo}` : ''}`, pdf: () => pdfDossie(d), csv: () => csvDossie(d) };
+    if (!Oraculo.atual) throw new X.ErroExportacao('vazio', 'Abra um dossiê primeiro.');
+    const d = structuredClone(Oraculo.atual), nome = d.nome || d.alvo;
+    base = `oraculo-${nome}`; assunto = `Oráculo · ${nome}`; resumo = `Dossiê de ${nome}`;
+    texto = `Segue o dossiê do Oráculo sobre ${nome}.${d.dossie?.resumo ? `\n\n${d.dossie.resumo}` : ''}`;
+    gerarPdf = async () => pdfDossie(d, X, await X.carregarJsPDF(JSPDF.url, JSPDF.sri));
+    gerarCsv = () => csvDossie(d, X);
+  } else {
+    const empresas = X.prepararEmpresas(Geo.empresas), onde = { ...(Geo.ultimo?.local || {}) }, seg = Geo.segmento || '';
+    const lugar = onde.bairro || onde.cidade || 'você', n = empresas.length, plural = `${n} empresa${n === 1 ? '' : 's'}`;
+    base = `empresas-perto-${onde.bairro || onde.cidade || 'aqui'}${seg ? `-${seg}` : ''}`;
+    assunto = `Empresas perto de ${lugar === 'você' ? 'mim' : lugar}${seg ? ` (${seg})` : ''}`; resumo = `${plural}${seg ? ` de ${seg}` : ''}`;
+    texto = `Segue a lista de ${plural}${seg ? ` de ${seg}` : ''} perto de ${onde.endereco || lugar}.`;
+    gerarPdf = async () => X.pdfEmpresas(await X.carregarJsPDF(JSPDF.url, JSPDF.sri), empresas, { titulo: `Empresas perto de ${lugar}${seg ? ` · ${seg}` : ''}`, subtitulo: onde.endereco });
+    gerarCsv = () => X.csvEmpresas(empresas);
   }
-  const onde = Geo.ultimo?.local, base = `empresas-perto-${nomeArq(onde?.bairro || onde?.cidade || 'aqui')}${Geo.segmento ? `-${nomeArq(Geo.segmento)}` : ''}`;
-  return { base, assunto: `Empresas perto de ${onde?.bairro || onde?.cidade || 'mim'}${Geo.segmento ? ` (${Geo.segmento})` : ''}`, texto: `Segue a lista de ${Geo.empresas.length} empresas${Geo.segmento ? ` de ${Geo.segmento}` : ''} perto de ${onde?.endereco || 'mim'}.`, pdf: pdfPerto, csv: async () => csvPerto() };
+  const prontos = {};
+  const arquivo = (tipo) => (prontos[tipo] ??= (async () => {
+    const dados = tipo === 'pdf' ? await gerarPdf() : gerarCsv();
+    const f = new File([dados], X.nomeArquivo(base, tipo), { type: tipo === 'pdf' ? 'application/pdf' : X.TIPO_CSV });
+    if (!f.size) throw new X.ErroExportacao('geracao', `O ${tipo.toUpperCase()} saiu vazio. Tente de novo.`);
+    return f;
+  })().catch((e) => { delete prontos[tipo]; throw e; }));
+  return { X, alvo, base, assunto, texto, resumo, arquivo };
 }
-async function entregarArquivo(blob, nome) {
-  const f = new File([blob], nome, { type: blob.type });
-  if (navigator.canShare?.({ files: [f] })) {
-    try { await navigator.share({ files: [f], title: nome }); return; } catch (e) { if (e?.name === 'AbortError') return; }
-  }
-  const u = URL.createObjectURL(blob), a = document.createElement('a');
-  a.href = u; a.download = nome; document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(u), 60000);
+const paraBase64 = (blob) => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => erro(new Error('Não consegui ler o arquivo gerado.')); r.readAsDataURL(blob); });
+const cartaoArquivo = (X, f, resumo) => `<div class="arq-cartao"><span class="arq-ic ${/pdf$/.test(f.name) ? 'pdf' : 'csv'}">${/pdf$/.test(f.name) ? IC_PDF : IC_CSV}</span><span class="pessoa-corpo"><span class="t">${esc(f.name)}</span><span class="d">${esc(resumo)} · ${X.tamanhoLegivel(f.size)}</span></span></div>`;
+// Erro de exportação: mensagem legível + registro técnico curto (sem dados das empresas).
+function falhaExport(onde, err, X) {
+  const e = X ? X.erroDeEnvio(err) : err;
+  const tec = String(err?.causa?.message || err?.message || '').replace(/\+?\d[\d\s().-]{6,}\d/g, '<número>').replace(/\S+@\S+/g, '<e-mail>').replace(/"[^"]*"/g, '"…"').replace(/^.{0,60}? (não escreve|nunca escreveu)/, '<contato> $1');
+  diag(`exportar-${onde}`, `${e.codigo || ''} ${tec.slice(0, 160)}`);
+  return e;
 }
-const paraBase64 = (blob) => new Promise((ok, erro) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = erro; r.readAsDataURL(blob); });
+
+// Arquivo pronto: compartilhar pela folha nativa (iPhone: Share Sheet → WhatsApp, Mail, Arquivos…) ou baixar.
+// O toque em "Compartilhar" é novo (o iOS exige), por isso o arquivo é gerado antes e só depois esta folha aparece.
+function folhaArquivoPronto(pk, f) {
+  const X = pk.X, url = URL.createObjectURL(f), podeComp = X.podeCompartilharArquivos(navigator, [f]);
+  folhaFechou = () => setTimeout(() => URL.revokeObjectURL(url), 60000);
+  abrirFolha({
+    titulo: /pdf$/.test(f.name) ? 'PDF pronto' : 'Planilha pronta', botao: podeComp ? 'Compartilhar' : 'Baixar', ocupado: 'Abrindo…',
+    campos: [{ tipo: 'html', html: `${cartaoArquivo(X, f, pk.resumo)}
+      <p class="campo-dica">${podeComp ? 'Escolha WhatsApp, Mail, Arquivos ou outro app. Se preferir, ' : 'Este aparelho não compartilha arquivos daqui. '}<a class="link" href="${url}" download="${esc(f.name)}" data-baixar>baixe o arquivo</a>.</p>` }],
+    salvar: async () => {
+      if (!podeComp) { $('#folha [data-baixar]').click(); return; }
+      const r = await X.compartilharArquivos(navigator, { arquivos: [f], titulo: f.name });
+      if (r === 'cancelado') throw Object.assign(new Error('Compartilhamento cancelado. Toque de novo quando quiser.'), { neutro: true });
+      aviso('Arquivo entregue ao app escolhido.');
+    },
+  });
+}
+
+// E-mail: sai do seu Gmail (servidor), com PDF e/ou CSV anexados. Só diz "enviado" quando o Gmail confirma.
+function folhaEmail(pk) {
+  const X = pk.X, r = (Exp.rascunho[`email-${pk.alvo}`] ??= { para: guardado.ler('cerebro-ultimo-email') || '', pdf: true, csv: true, texto: pk.texto });
+  abrirFolha({
+    titulo: 'Enviar por e-mail', botao: 'Enviar e-mail', ocupado: 'Enviando…',
+    campos: [
+      { rotulo: 'E-mail de quem recebe', nome: 'para', tipoInput: 'email', valor: r.para, placeholder: 'nome@empresa.com.br' },
+      { tipo: 'marcas', rotulo: 'Anexar', opcoes: [{ nome: 'pdf', texto: 'PDF', marcado: r.pdf }, { nome: 'csv', texto: 'CSV (planilha)', marcado: r.csv }] },
+      { tipo: 'html', html: `<p class="campo-dica">Assunto: <b>${esc(pk.assunto)}</b> · ${esc(pk.resumo)}. Sai do seu Gmail.</p>` },
+      { rotulo: 'Mensagem', nome: 'texto', tipoInput: 'textarea', linhas: 4, valor: r.texto },
+    ],
+    aoAbrir: (form) => form.addEventListener('input', () => Object.assign(r, { para: form.para.value, pdf: form.pdf.checked, csv: form.csv.checked, texto: form.texto.value })),
+    salvar: async (f) => {
+      const em = X.validarEmail(f.para);
+      if (!em.ok) throw new Error(em.erro);
+      if (!f.pdf && !f.csv) throw new Error('Marque PDF, CSV ou os dois.');
+      const arquivos = [];
+      try {
+        for (const t of ['pdf', 'csv'].filter((t) => f[t])) { progressoFolha(`Gerando ${t.toUpperCase()}…`); const a = await pk.arquivo(t); arquivos.push({ nome: a.name, tipo: t === 'pdf' ? 'application/pdf' : 'text/csv', base64: await paraBase64(a) }); }
+        progressoFolha('Enviando…');
+        const res = await api('/exportar', { metodo: 'POST', corpo: { canal: 'email', para: em.email, assunto: pk.assunto, texto: f.texto, arquivos } });
+        if (!res?.enviado) throw new X.ErroExportacao('envio', 'O servidor não confirmou o envio. Confira na pasta Enviados do Gmail antes de repetir.');
+        guardado.gravar('cerebro-ultimo-email', em.email);
+        aviso(res.mensagem || `E-mail enviado para ${em.email}.`);
+      } catch (err) { throw falhaExport('email', err, X); }
+    },
+  });
+}
+
+// WhatsApp, dois caminhos com regras diferentes (não se misturam):
+//  • Pelo meu celular: abre a conversa pelo link oficial wa.me (qualquer número, salvo ou não; só texto) e manda o arquivo pela
+//    folha nativa do iPhone (o link do WhatsApp não carrega arquivo). Nada é "enviado" pelo app: quem envia é você, no WhatsApp.
+//  • Pelo número comercial: o servidor envia pela API oficial (YCloud/Meta). A Meta só deixa mandar arquivo a quem escreveu
+//    nas últimas 24 h; fora disso exige modelo aprovado — o app avisa e não tenta contornar.
+function folhaWhatsApp(pk) {
+  const X = pk.X, r = (Exp.rascunho[`wa-${pk.alvo}`] ??= { modo: guardado.ler('cerebro-wa-modo') || 'celular', para: '', nome: '', pdf: true, csv: false, texto: pk.texto, conversaAberta: '' });
+  const DICA = {
+    celular: 'Sai do WhatsApp do seu iPhone. O número não precisa estar salvo. 1º abre a conversa com a mensagem; 2º você manda o arquivo.',
+    comercial: 'Sai direto do número comercial, com o arquivo anexado. A Meta só permite para quem te escreveu nas últimas 24 h.',
+  };
+  let form, campo;
+  const modo = () => form?.modo?.value || r.modo;
+  const ajustar = () => {
+    const dig = form.para.value || (X.normalizarTelefone(form.busca_para?.value || '').digitos ?? ''), m = modo(), temNum = !!dig, aberta = m === 'celular' && temNum && r.conversaAberta === dig;
+    $('#wa-dica').textContent = DICA[m];
+    if (m === 'comercial') botaoFolha('Enviar agora', 'Enviando…');
+    else if (temNum && !aberta) botaoFolha('1. Abrir conversa no WhatsApp', 'Abrindo…');
+    else botaoFolha(temNum ? '2. Mandar o arquivo' : 'Compartilhar no WhatsApp', 'Abrindo…');
+    $('#wa-etapas').hidden = !(m === 'celular' && temNum);
+    $('#wa-etapas').innerHTML = `<li class="${aberta ? 'feito' : 'atual'}">Abrir a conversa com a mensagem pronta</li><li class="${aberta ? 'atual' : ''}">Mandar o arquivo: escolha WhatsApp e a conversa</li>`;
+    campo?.redesenhar?.();
+    Object.assign(r, { modo: m, para: form.para.value, nome: form.para.dataset.nomeEscolhido || '', pdf: form.pdf.checked, csv: form.csv.checked, texto: form.texto.value });
+    guardado.gravar('cerebro-wa-modo', m);
+    if (m === 'celular') arquivosEscolhidos().catch(() => {});   // já deixa os arquivos prontos para o toque de compartilhar
+  };
+  const arquivosEscolhidos = () => Promise.all(['pdf', 'csv'].filter((t) => form[t].checked).map((t) => pk.arquivo(t)));
+  abrirFolha({
+    titulo: 'Enviar no WhatsApp', botao: 'Compartilhar no WhatsApp',
+    campos: [
+      { tipo: 'escolha', nome: 'modo', rotulo: 'Enviar', classe: 'duas', opcoes: [{ valor: 'celular', texto: 'Pelo meu celular', marcado: r.modo === 'celular' }, { valor: 'comercial', texto: 'Pelo número comercial', marcado: r.modo === 'comercial' }] },
+      { tipo: 'html', html: '<p class="campo-dica" id="wa-dica"></p>' },
+      { tipo: 'contato', rotulo: 'Para quem', nome: 'para', valor: r.para, nomeValor: r.nome },
+      { tipo: 'marcas', rotulo: 'Arquivo', opcoes: [{ nome: 'pdf', texto: 'PDF', marcado: r.pdf }, { nome: 'csv', texto: 'CSV (planilha)', marcado: r.csv }] },
+      { tipo: 'html', html: `<p class="campo-dica">${esc(pk.resumo)} · ${esc(X.nomeArquivo(pk.base, 'pdf').replace(/\.pdf$/, ''))}</p>` },
+      { rotulo: 'Mensagem', nome: 'texto', tipoInput: 'textarea', linhas: 3, valor: r.texto },
+      { tipo: 'html', html: '<ol class="wa-etapas" id="wa-etapas" hidden></ol>' },
+    ],
+    aoAbrir: (f) => {
+      form = f; campo = f.querySelector('[data-campo-contato]');
+      montarEscolhaContato(campo, X, { janela: () => modo() === 'comercial', aoMudar: () => form && ajustar() });
+      // só rádios e caixas: o "change" do campo de busca chega ao tocar num contato e redesenhar ali engoliria o toque
+      f.addEventListener('change', (e) => { if (e.target.matches('input[type=radio], input[type=checkbox]')) ajustar(); }); f.texto.addEventListener('input', () => { r.texto = f.texto.value; });
+      f.busca_para.addEventListener('input', () => { const m = modo(); if (m === 'celular') ajustar(); });
+      ajustar();
+    },
+    salvar: async (f) => {
+      if (!f.pdf && !f.csv) throw new Error('Marque PDF, CSV ou os dois.');
+      const digitado = (f.busca_para || '').trim();
+      if (!f.para && digitado && !X.pareceTelefone(digitado)) throw new Error('Toque no contato na lista para escolher.');
+      const bruto = f.para || digitado, para = bruto ? X.normalizarTelefone(bruto) : null;
+      if (para && !para.ok) throw new Error(para.erro);
+      if (f.modo === 'comercial') {
+        if (!para) throw new Error('Escolha o contato ou digite o número com DDD.');
+        try {
+          const arquivos = [];
+          for (const t of ['pdf', 'csv'].filter((t) => f[t])) { progressoFolha(`Gerando ${t.toUpperCase()}…`); const a = await pk.arquivo(t); arquivos.push({ nome: a.name, tipo: t === 'pdf' ? 'application/pdf' : 'text/csv', base64: await paraBase64(a) }); }
+          progressoFolha('Enviando…');
+          const res = await api('/exportar', { metodo: 'POST', corpo: { canal: 'whatsapp', para: para.digitos, assunto: pk.assunto, texto: f.texto, arquivos } });
+          if (!res?.enviado) throw new X.ErroExportacao('envio', 'O servidor não confirmou o envio. Confira a conversa antes de repetir.');
+          aviso(res.mensagem || 'Enviado no WhatsApp.');
+          return;
+        } catch (err) { throw falhaExport('whatsapp', err, X); }
+      }
+      // Pelo meu celular — etapa 1: abrir a conversa (link oficial, dentro do toque para o iPhone não bloquear).
+      if (para && r.conversaAberta !== para.digitos) {
+        const a = document.createElement('a'); a.href = X.linkWhatsApp(para.digitos, f.texto); a.target = '_blank'; a.rel = 'noopener';
+        document.body.append(a); a.click(); a.remove();
+        r.conversaAberta = para.digitos; ajustar();
+        throw Object.assign(new Error('Conversa aberta no WhatsApp com a mensagem pronta (confira e toque em enviar lá). Volte aqui e toque em "2. Mandar o arquivo".'), { neutro: true });
+      }
+      // Etapa 2 (ou direto, sem número): folha nativa com o arquivo; no WhatsApp, você escolhe a conversa.
+      let arquivos;
+      try { arquivos = await arquivosEscolhidos(); } catch (err) { throw falhaExport('arquivo', err, X); }
+      try {
+        const res = await X.compartilharArquivos(navigator, { arquivos, texto: para ? '' : f.texto, titulo: pk.assunto });
+        if (res === 'cancelado') throw Object.assign(new Error('Compartilhamento cancelado. Os dados continuam aqui: toque de novo quando quiser.'), { neutro: true });
+      } catch (err) {
+        if (err.neutro) throw err;
+        if (err.codigo === 'sem_compartilhar') throw new Error('Este aparelho não deixa compartilhar arquivos daqui. Feche e use o botão PDF ou CSV para baixar o arquivo.');
+        throw falhaExport('compartilhar', err, X);
+      }
+      Exp.rascunho[`wa-${pk.alvo}`] = null;
+      aviso('Arquivo entregue ao WhatsApp. Confira lá se a mensagem foi enviada.');
+    },
+  });
+}
 
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-exp]'); if (!b) return;
-  const alvo = b.dataset.expAlvo, x = dadosExport(alvo), acao = b.dataset.exp;
-  if (alvo === 'perto' && !Geo.empresas.length) { aviso('Busque as empresas primeiro.'); return; }
-  if (acao === 'pdf' || acao === 'csv') {
-    const t = b.innerHTML; b.disabled = true; b.textContent = '…';
-    try { await entregarArquivo(await x[acao](), `${x.base}.${acao}`); } catch (err) { aviso(`Não consegui gerar o ${acao.toUpperCase()}: ${err.message}`); }
-    finally { b.disabled = false; b.innerHTML = t; }
-    return;
-  }
-  const email = acao === 'email';
-  abrirFolha({
-    titulo: email ? 'Enviar por e-mail' : 'Enviar no WhatsApp', botao: 'Enviar',
-    campos: [
-      email
-        ? { rotulo: 'E-mail de quem recebe', nome: 'para', tipoInput: 'email', valor: guardado.ler('cerebro-ultimo-email') || '', placeholder: 'nome@empresa.com.br', obrigatorio: true, dica: 'Sai do seu Gmail, com os arquivos em anexo.' }
-        : { tipo: 'contato', rotulo: 'Para quem', nome: 'para', dica: 'Sai do seu WhatsApp comercial. A Meta só deixa enviar para quem te escreveu nas últimas 24 h; esses aparecem primeiro.' },
-      { tipo: 'marcas', rotulo: 'Arquivos', opcoes: [{ nome: 'pdf', texto: 'PDF', marcado: true }, { nome: 'csv', texto: 'CSV (planilha)', marcado: email }] },
-      { rotulo: 'Mensagem', nome: 'texto', valor: x.texto },
-    ],
-    salvar: async (f) => {
-      if (!email && !f.para) throw new Error('Escolha o contato na lista.');
-      if (!f.pdf && !f.csv) throw new Error('Escolha pelo menos um arquivo.');
-      const arquivos = [];
-      if (f.pdf) arquivos.push({ nome: `${x.base}.pdf`, tipo: 'application/pdf', base64: await paraBase64(await x.pdf()) });
-      if (f.csv) arquivos.push({ nome: `${x.base}.csv`, tipo: 'text/csv', base64: await paraBase64(await x.csv()) });
-      const r = await api('/exportar', { metodo: 'POST', corpo: { canal: email ? 'email' : 'whatsapp', para: f.para, assunto: x.assunto, texto: f.texto, arquivos } });
-      if (email) guardado.gravar('cerebro-ultimo-email', f.para);
-      aviso(r.mensagem || 'Enviado.');
-    },
-  });
+  if (Exp.ocupado) return;                       // um toque por vez
+  const alvo = b.dataset.expAlvo, acao = b.dataset.exp, t = b.innerHTML;
+  Exp.ocupado = true; b.disabled = true; b.classList.add('ocupado');
+  let X = null;
+  try {
+    const pk = await pacoteExport(alvo); X = pk.X;
+    if (acao === 'pdf' || acao === 'csv') { b.textContent = 'Gerando…'; folhaArquivoPronto(pk, await pk.arquivo(acao)); }
+    else if (acao === 'email') folhaEmail(pk);
+    else folhaWhatsApp(pk);
+  } catch (err) {
+    const er = falhaExport(acao, err, X);
+    aviso(acao === 'pdf' || acao === 'csv' ? `Não consegui gerar o ${acao.toUpperCase()}. ${er.message}` : er.message);
+  } finally { Exp.ocupado = false; b.disabled = false; b.classList.remove('ocupado'); b.innerHTML = t; }
 });
 
 // ---------------------------------------------------------------------------
@@ -2861,6 +2965,23 @@ function perguntarAoDimy(t) {
 }
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
+// Versão nova publicada: o iPhone mantém o app vivo por dias e, ao voltar, continuava rodando o código antigo (foi o que manteve
+// o erro do PDF na tela depois da correção). Ao voltar para o app, confere a versão no servidor e recarrega se mudou —
+// só quando não há nada em andamento (folha aberta, gravação, digitação, exportação).
+async function verificarVersao() {
+  try {
+    const t = await (await fetch(`./sw.js?c=${Date.now()}`, { cache: 'no-store' })).text();
+    const nova = +(t.match(/cerebro-v(\d+)/)?.[1] || 0), atual = +VERSAO.replace(/\D/g, '');
+    if (!(nova > atual)) return;
+    if (!$('#folha').hidden || Exp.ocupado || (typeof Rec !== 'undefined' && Rec.ativo) || document.activeElement?.matches?.('input, textarea')) return;
+    diag('atualizou', `${VERSAO} -> v${nova}`);
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    await reg?.update?.().catch(() => {});
+    location.reload();
+  } catch { /* sem rede: tenta na próxima volta */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
+setTimeout(verificarVersao, 4000);
 // Ao voltar para o app, atualiza a tela atual.
 document.addEventListener('visibilitychange', () => { if (!document.hidden && logado() && !$('#app').hidden) rota(); });
 
