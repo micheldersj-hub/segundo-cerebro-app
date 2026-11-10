@@ -27,7 +27,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v45';
+const VERSAO = 'v46';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -3866,7 +3866,7 @@ const duracao = (d) => (d === null || d === undefined ? null : d >= 365 ? 'mais 
 
 async function carregarConfig() {
   const [, aba] = location.hash.slice(1).split('/');
-  Cfg.aba = ['consumo', 'economia', 'alertas'].includes(aba) ? aba : 'consumo';
+  Cfg.aba = ['consumo', 'economia', 'alertas', 'conexoes'].includes(aba) ? aba : 'consumo';
   document.querySelectorAll('#cfg-abas [data-cfg-aba]').forEach((b) => b.classList.toggle('on', b.dataset.cfgAba === Cfg.aba));
   if (!Cfg.p || Date.now() - Date.parse(Cfg.p.atualizado_em) > 20000) {
     if (!Cfg.p) $('#cfg-corpo').innerHTML = '<p class="dica centro">Carregando…</p>';
@@ -3876,7 +3876,7 @@ async function carregarConfig() {
 }
 function desenharConfig() {
   const p = Cfg.p; if (!p) return;
-  $('#cfg-corpo').innerHTML = Cfg.aba === 'economia' ? cfgEconomia(p) : Cfg.aba === 'alertas' ? cfgAlertas(p) : cfgConsumo(p);
+  $('#cfg-corpo').innerHTML = cfgFaixaConexoes(p) + (Cfg.aba === 'economia' ? cfgEconomia(p) : Cfg.aba === 'alertas' ? cfgAlertas(p) : Cfg.aba === 'conexoes' ? cfgConexoes(p) : cfgConsumo(p));
 }
 
 function cfgHero(p) {
@@ -4038,12 +4038,64 @@ function cfgAlertas(p) {
   <p class="campo-dica cfg-nota">Preços usados (US$ por milhão de tokens): ${(p.precos || []).map((x) => `${x.modelo.replace('claude-', '')}: entrada ${String(x.entrada).replace('.', ',')}, saída ${String(x.saida).replace('.', ',')}`).join(' · ')} · busca na web: US$ 10 por mil.</p>`;
 }
 
+// Conexões: estado das chaves dos serviços (conferidas a cada 10 min no servidor), validade, saldo e troca da chave
+// direto daqui — a chave é testada no fornecedor antes de ser gravada no cofre; nunca volta para a tela.
+const quandoCnx = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const CONEXAO_DICA = {
+  anthropic: 'Crie em console.anthropic.com › Settings › API Keys › Create Key. Em validade (Expiration), escolha <b>Never</b>: assim ela não vence.',
+  openai: 'Crie em platform.openai.com/api-keys › Create new secret key. Se aparecer validade, escolha a mais longa ou sem validade.',
+  ycloud: 'Copie em YCloud › Developers › API Keys.',
+};
+function cfgFaixaConexoes(p) {
+  const fora = (p.chaves || []).filter((c) => c.usado && c.essencial && !c.ok);
+  if (!fora.length || Cfg.aba === 'conexoes') return '';
+  return `<button class="cfg-faixa-fora" data-cfg-aba-ir="conexoes">⚠️ ${fora.map((c) => esc(c.nome)).join(', ')} ${fora.length > 1 ? 'pararam' : 'parou'}. Toque para resolver.</button>`;
+}
+function cfgConexoes(p) {
+  const lista = (p.chaves || []).filter((c) => c.usado || !c.ok);
+  if (!lista.length) return '<p class="dica centro">A primeira conferência das conexões ainda não rodou. Toque em "Conferir agora".</p><div class="centro"><button class="btn pequeno" data-cfg-testar>Conferir agora</button></div>';
+  const ult = lista.reduce((m, c) => (c.verificado_em > m ? c.verificado_em : m), '');
+  const temAdmin = (p.chaves || []).some((c) => c.servico === 'anthropic_admin');
+  const linha = (c) => {
+    const dias = c.expira_em ? (Date.parse(c.expira_em) - Date.now()) / 864e5 : null;
+    const estado = !c.ok ? 'fora' : dias !== null && dias <= 7 ? 'atencao' : 'ok';
+    const sub = !c.ok ? `Parou em ${quandoCnx(c.desde)}. ${esc(c.detalhe || '')}`
+      : [esc(c.detalhe || 'Funcionando'), c.expira_em ? `vence em ${quandoCnx(c.expira_em)}${dias !== null && dias <= 7 ? ` (${Math.max(0, Math.ceil(dias))} dia${Math.ceil(dias) === 1 ? '' : 's'})` : ''}` : '', c.saldo !== null && c.saldo !== undefined ? `saldo ${usd(c.saldo)}` : ''].filter(Boolean).join(' · ');
+    return `<li class="cnx ${estado}"><span class="cnx-ponto" aria-hidden="true"></span>
+      <span class="cnx-corpo"><b>${esc(c.nome)}</b><small>${sub}</small></span>
+      ${c.troca ? `<button class="btn pequeno ${c.ok ? 'claro' : ''}" data-cfg-trocar="${c.servico}">${c.ok ? 'Trocar' : 'Trocar chave'}</button>` : ''}</li>`;
+  };
+  return `<section class="ajustes cfg-conexoes">
+    <p class="dica">Conferidas sozinhas a cada 10 minutos, sem gastar crédito. Se uma chave parar ou estiver para vencer, você recebe um aviso no celular, e nada se perde: as mensagens esperam e são processadas quando a conexão volta.</p>
+    <ul class="cnx-lista">${lista.map(linha).join('')}</ul>
+    <div class="cfg-form-acoes"><button class="btn pequeno claro" data-cfg-testar>Conferir agora</button><small class="dica">Última conferência: ${ult ? quandoCnx(ult) : '—'}</small></div>
+    ${temAdmin ? '' : '<p class="campo-dica">Para eu avisar <b>antes</b> de a chave do Claude vencer, ligue a "conta oficial" em <a href="#config/alertas" class="link">Alertas e saldo</a> com uma chave de administrador (crie com validade Never).</p>'}
+  </section>`;
+}
+function folhaTrocarChave(servico) {
+  const c = (Cfg.p?.chaves || []).find((x) => x.servico === servico); if (!c) return;
+  abrirFolha({
+    titulo: `Trocar chave · ${c.nome}`, botao: 'Testar e salvar', ocupado: 'Testando…',
+    campos: [
+      { tipo: 'html', html: `<p class="campo-dica">${CONEXAO_DICA[servico] || ''} Cole aqui: eu testo no fornecedor e só gravo se funcionar. A chave fica no cofre do servidor e não aparece mais na tela.</p>` },
+      { rotulo: 'Chave nova', nome: 'chave', tipoInput: 'password', placeholder: servico === 'anthropic' ? 'sk-ant-…' : servico === 'openai' ? 'sk-…' : '', autocomplete: 'off' },
+    ],
+    salvar: async (f) => {
+      const chave = String(f.chave || '').trim();
+      if (!chave) throw new Error('Cole a chave nova.');
+      Cfg.p = await api('/consumo/chave', { metodo: 'POST', corpo: { servico, chave } });
+      aviso(`Chave de ${c.nome} trocada e funcionando.`);
+      desenharConfig();
+    },
+  });
+}
 $('#cfg-abas').addEventListener('click', (e) => { const b = e.target.closest('[data-cfg-aba]'); if (b) ir(`config/${b.dataset.cfgAba}`); });
 $('#v-config').addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-cfg-form],[data-cfg-preset],[data-cfg-dia],[data-cfg-aba-ir],[data-cfg-tirar-chave]');
+  const el = e.target.closest('[data-cfg-form],[data-cfg-preset],[data-cfg-dia],[data-cfg-aba-ir],[data-cfg-tirar-chave],[data-cfg-trocar],[data-cfg-testar]');
   if (!el) return;
   const d = el.dataset;
   if (d.cfgAbaIr) { ir(`config/${d.cfgAbaIr}`); return; }
+  if (d.cfgTrocar) { folhaTrocarChave(d.cfgTrocar); return; }
   if (d.cfgDia) { Cfg.sel = Cfg.sel === d.cfgDia ? null : d.cfgDia; const g = $('.cfg-grafico'); if (g) g.outerHTML = cfgGrafico(Cfg.p.por_dia); return; }
   if (d.cfgForm !== undefined) {
     e.preventDefault();
@@ -4057,6 +4109,12 @@ $('#v-config').addEventListener('click', async (e) => {
       document.querySelectorAll('.cfg-preset').forEach((b) => (b.disabled = true));
       Cfg.p = await api('/consumo/preset', { metodo: 'POST', corpo: { preset: d.cfgPreset } });
       aviso(`Modo ${Cfg.p.presets.find((m) => m.id === d.cfgPreset)?.nome ?? ''} ligado.`); desenharConfig(); return;
+    }
+    if (d.cfgTestar !== undefined) {
+      el.disabled = true; el.textContent = 'Conferindo…';
+      Cfg.p = await api('/consumo/chaves-testar', { metodo: 'POST', corpo: {} });
+      const fora = (Cfg.p.chaves || []).filter((c) => c.usado && !c.ok);
+      aviso(fora.length ? `${fora.length} conexão(ões) com problema.` : 'Todas as conexões funcionando.'); desenharConfig(); return;
     }
     if (d.cfgTirarChave !== undefined) {
       el.disabled = true;
