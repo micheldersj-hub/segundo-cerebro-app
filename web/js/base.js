@@ -2,7 +2,7 @@
 // Nada de dado fica só aqui: tudo é lido e gravado no mesmo servidor do app, por isso o que muda num aparece no outro.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-export const VERSAO = 'w7';
+export const VERSAO = 'w8';
 const PROJ = 'https://mavjbevuhzalkqyxaajw.supabase.co';
 const F = (n) => `${PROJ}/functions/v1/${n}`;
 // Chave anônima: pública por design (só permite entrar); os dados passam pelas funções, que conferem o login.
@@ -24,7 +24,8 @@ export const Conta = {
   lista: [],            // [{ dono, nome, agenda, tarefas }] vindas de /chat/pessoas
   atual: null,          // id do dono escolhido; null = a minha
   carregar(lista) { this.lista = lista || []; const g = guardado.ler('dimyweb-conta'); this.atual = this.lista.some((c) => c.dono === g) ? g : null; },
-  escolher(id) { this.atual = id || null; guardado.gravar('dimyweb-conta', this.atual); limparAgenda(); document.dispatchEvent(new Event('dimy:conta')); },
+  escolher(id) { this.atual = id || null; guardado.gravar('dimyweb-conta', this.atual || 'minha');   // "minha" = escolheu a própria de propósito
+    limparAgenda(); document.dispatchEvent(new Event('dimy:conta')); },
   nome() { return this.lista.find((c) => c.dono === this.atual)?.nome || ''; },
   pode(o) { return this.lista.filter((c) => c[o]); },
   tela: '',             // a conta escolhida só vale nas telas Agenda e Tarefas; Hoje, chat etc. são sempre da própria pessoa
@@ -186,11 +187,11 @@ export function editarEvento(ev, { dia, hora, sugestao, depois } = {}) {
   const ini = ev && !ev.dia_inteiro ? horaISO(ev.inicio) : hora || proximaHoraCheia();
   const fim = ev && ev.fim && !ev.dia_inteiro ? horaISO(ev.fim) : horaISO(new Date(Date.parse(montarISO(d0, ini)) + 3600e3));
   abrirJanela({
-    titulo: ev ? 'Editar compromisso' : 'Novo compromisso',
+    titulo: `${ev ? 'Editar compromisso' : 'Novo compromisso'}${Conta.vale('agenda') ? ` · agenda de ${Conta.nome().split(' ')[0]}` : ''}`,
     campos: [
       { rotulo: 'O quê', nome: 'titulo', valor: ev?.titulo ?? sugestao?.titulo, placeholder: 'Visita – cliente', obrigatorio: true },
       { tipo: 'linha', campos: [{ rotulo: 'Dia', nome: 'dia', tipoInput: 'date', valor: d0 }, { rotulo: 'Início', nome: 'inicio', tipoInput: 'time', valor: ini }, { rotulo: 'Fim', nome: 'fim', tipoInput: 'time', valor: fim }] },
-      { rotulo: 'Onde', nome: 'local', valor: ev?.local ?? sugestao?.local, placeholder: 'Opcional' },
+      { rotulo: 'Onde', nome: 'local', valor: ev?.local ?? sugestao?.local, placeholder: 'Endereço (rua, número, cidade) para a rota no mapa' },
     ],
     salvar: async (f) => {
       if (!f.titulo?.trim() || !f.dia || !f.inicio) throw new Error('Preencha o quê, o dia e a hora.');
@@ -221,8 +222,14 @@ export function editarLembrete(l, { sugestao, depois } = {}) {
   });
 }
 // Só oferece rota quando o "local" parece um endereço de verdade (número, rua, avenida…), não uma anotação.
-export const eEndereco = (l) => { const t = String(l || '').trim(); return t.length >= 6 && t.length <= 160 && !/^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(t)
-  && (/\d/.test(t) || /\b(rua|r\.|av\.?|avenida|alameda|al\.|pra[cç]a|rodovia|rod\.|estrada|travessa|largo|bairro|shopping|centro|condom[ií]nio|edif[ií]cio|ed\.)\b/i.test(t)); };
+// Rota só quando o "local" parece um lugar: tem número, nome de via/lugar, vírgula (ex.: "Padaria Sol, Betim") ou é curto.
+// Fica de fora o que é online (link, Meet, Zoom, ligação) e frases longas que são anotação ("Chamar ele novamente para...").
+export const eEndereco = (l) => {
+  const t = String(l || '').trim(), palavras = t.split(/\s+/).length;
+  if (t.length < 4 || t.length > 160 || /^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(t)) return false;
+  return /\d/.test(t) || /\b(rua|r\.|av\.?|avenida|alameda|al\.|pra[cç]a|rodovia|rod\.|estrada|travessa|largo|bairro|shopping|centro|condom[ií]nio|edif[ií]cio|ed\.|padaria|loja|escrit[oó]rio|empresa|igreja|hotel|restaurante)\b/i.test(t)
+    || (t.includes(',') && palavras <= 12) || palavras <= 5;
+};
 export const linkMapa = (l) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l)}`;
 export const IC = {
   mais: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',

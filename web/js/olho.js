@@ -1,6 +1,6 @@
 // Olho de Deus: inteligência de mercado. Abas (visão, alertas, empresas, movimentos, histórico, ajustes) e o detalhe
 // de empresa ou movimento num painel ao lado. Tudo vem do servidor (coleta programada); nada de demonstração.
-import { $, abrirJanela, api, aviso, esc, ha, IC, quando } from './base.js?v=w7';
+import { $, abrirJanela, api, aviso, esc, ha, IC, quando } from './base.js?v=w8';
 
 export const titulo = 'Olho de Deus';
 const O = { aba: 'visao', cfg: null, admin: false, empresas: [], fEmp: { categoria: '', segmento: '', q: '' }, fMov: { relevancia: '', filtro: '', dias: '30', segmento: '', categoria: '' }, fAl: { nivel: '', nao_lidos: '1' }, lado: null };

@@ -1,13 +1,13 @@
 // Dimy Web — entrada: login, rotas, tema, contadores do menu e verificação de versão nova.
-import { $, $$, api, aviso, Conta, sessaoAtual, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js?v=w7';
-import * as Hoje from './hoje.js?v=w7';
-import * as Agenda from './agenda.js?v=w7';
-import * as Tarefas from './tarefas.js?v=w7';
-import * as Conversa from './conversa.js?v=w7';
-import * as Whats from './whats.js?v=w7';
-import * as Oraculo from './oraculo.js?v=w7';
-import * as Olho from './olho.js?v=w7';
-import * as Equipe from './equipe.js?v=w7';
+import { $, $$, api, aviso, Conta, sessaoAtual, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js?v=w8';
+import * as Hoje from './hoje.js?v=w8';
+import * as Agenda from './agenda.js?v=w8';
+import * as Tarefas from './tarefas.js?v=w8';
+import * as Conversa from './conversa.js?v=w8';
+import * as Whats from './whats.js?v=w8';
+import * as Oraculo from './oraculo.js?v=w8';
+import * as Olho from './olho.js?v=w8';
+import * as Equipe from './equipe.js?v=w8';
 
 const TELAS = { hoje: Hoje, agenda: Agenda, tarefas: Tarefas, conversa: Conversa, equipe: Equipe, whats: Whats, oraculo: Oraculo, olho: Olho };
 let atual = null;
@@ -43,7 +43,15 @@ setInterval(() => { if (!document.hidden && Sessao.logado) contadores(true).catc
 document.addEventListener('dimy:mudou', () => contadores(true).catch(() => {}));   // telas avisam quando mudam algo
 
 // ---- Contas compartilhadas comigo (ex.: secretária vê a agenda e as tarefas do chefe) ----
-async function carregarContas() { try { Conta.carregar((await api('/chat/pessoas')).compartilhadas); } catch { Conta.carregar([]); } }
+async function carregarContas() {
+  try { Conta.carregar((await api('/chat/pessoas')).compartilhadas); } catch { Conta.carregar([]); }
+  // Quem recebeu a agenda de alguém (ex.: secretária) e não tem Google próprio abre direto a agenda compartilhada,
+  // a menos que já tenha escolhido "Minha" antes. Sem isso, ela marcava na própria agenda (sem Google) e falhava.
+  const comp = Conta.pode('agenda')[0];
+  if (!Conta.atual && comp && guardado.ler('dimyweb-conta') !== 'minha') {
+    try { const r = await eventosDe(hoje(), 1, true); if (!r.google) { Conta.atual = comp.dono; } } catch { /* fica na própria */ }
+  }
+}
 setInterval(() => { if (!document.hidden && Sessao.logado) carregarContas().catch(() => {}); }, 5 * 60e3);
 document.addEventListener('dimy:conta', () => { if (Sessao.logado && ['agenda', 'tarefas'].includes(atual)) { const el = $('#principal'); atual = null; el.innerHTML = ''; rota(); } });
 

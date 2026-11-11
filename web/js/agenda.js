@@ -1,6 +1,6 @@
 // Agenda: seus compromissos do Google, em dia, semana ou mês. Clique num horário vazio para marcar;
 // clique num compromisso para editar. Grava nas mesmas rotas do app (/agenda), então aparece no celular também.
-import { $, Conta, diaISO, diaSemana, editarEvento, eEndereco, esc, eventosDe, hoje, horaISO, IC, linkMapa, maiuscula, nomeDia, seletorConta, somaDias } from './base.js?v=w7';
+import { $, Conta, diaISO, diaSemana, editarEvento, eEndereco, esc, eventosDe, hoje, horaISO, IC, linkMapa, maiuscula, nomeDia, seletorConta, somaDias } from './base.js?v=w8';
 
 export const titulo = 'Agenda';
 const MODOS = [['dia', 'Dia', IC.dia1], ['semana', 'Semana', IC.semana], ['mes', 'Mês', IC.mes]];

@@ -1,6 +1,6 @@
 // Oráculo: pesquisa de empresas (dossiês) e empresas perto de você. Lista à esquerda, dossiê à direita.
 // Exportar PDF/CSV baixa direto no computador; e-mail sai pelo seu Gmail; WhatsApp pelo fluxo de encaminhar do servidor.
-import { $, abrirJanela, api, aviso, diaISO, IC, editarEvento, editarLembrete, esc, hoje, iniciais, somaDias, TZ } from './base.js?v=w7';
+import { $, abrirJanela, api, aviso, diaISO, IC, editarEvento, editarLembrete, esc, hoje, iniciais, somaDias, TZ } from './base.js?v=w8';
 
 export const titulo = 'Oráculo';
 const O = { lista: [], atual: null, timer: 0, perto: null, aba: 'abordagem' };
@@ -175,7 +175,7 @@ function desenharPerto() {
 
 // ---- Exportar (mesmos serviços do app: exportar.js + jsPDF local) ----
 let modExp = null;
-const Xp = () => (modExp ??= import('./exportar.js?v=w7').catch((e) => { modExp = null; throw e; }));
+const Xp = () => (modExp ??= import('./exportar.js?v=w8').catch((e) => { modExp = null; throw e; }));
 const JSPDF = { url: './vendor/jspdf-4.2.1.umd.min.js', sri: 'sha384-qovJwSBbRDPP5cEjCp8S0UP66wrvnjaa60XMOGzTNanrThcrGfXfnZkvgY8N1KT3' };
 async function pacote(alvo) {
   const X = await Xp();

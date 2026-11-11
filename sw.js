@@ -1,5 +1,5 @@
 // Service worker do Segundo Cérebro: guarda a "casca" do app e recebe notificações push.
-const CACHE = 'cerebro-v48';
+const CACHE = 'cerebro-v49';
 // Mesmos endereços que o index.html e o app.js pedem (antes ficava '?v=22' fixo e o modo sem internet não achava o app.js).
 const N = CACHE.split('-v')[1], V = '?v=' + N;
 const SHELL = ['./', './index.html', './app.js' + V, './style.css' + V, './exportar.js?v' + N, './vendor/jspdf-4.2.1.umd.min.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];

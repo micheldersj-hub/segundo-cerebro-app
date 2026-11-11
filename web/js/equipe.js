@@ -1,7 +1,7 @@
 // Equipe: chat interno privado (conversas a dois e o grupo "Equipe"), com fotos e arquivos.
 // Só quem participa de uma conversa a vê — nem o administrador lê conversa dos outros. Mesmo servidor do app: o que se fala aqui
 // aparece no celular, e quem estiver com o app recebe aviso. Aqui também o dono compartilha a agenda e as tarefas (ex.: secretária).
-import { $, abrirJanela, api, aviso, esc, ha, IC, iniciais, leve } from './base.js?v=w7';
+import { $, abrirJanela, api, aviso, esc, ha, IC, iniciais, leve } from './base.js?v=w8';
 
 export const titulo = 'Equipe';
 const E = { conversas: [], atual: null, msgs: [], ultima: null, mais: false, pessoas: null, timer: 0, enviando: false, lidoOutros: null };

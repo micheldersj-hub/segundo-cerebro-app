@@ -30,7 +30,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v48';
+const VERSAO = 'v49';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -300,7 +300,13 @@ const diaSemana = (dia) => new Date(`${dia}T12:00:00-03:00`).getUTCDay(); // 0 =
 const nomeDia = (dia, opts) => new Date(`${dia}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ, ...opts });
 
 // ---- Endereços: mapa e rota (Waze / Mapas) ----
-const eEndereco = (l) => !!l && l.trim().length >= 6 && !/^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(l);
+// Rota só quando o "local" parece um lugar (número, via, vírgula ou nome curto); não para link/online nem para frase longa de anotação.
+const eEndereco = (l) => {
+  const t = String(l || '').trim(), palavras = t.split(/\s+/).length;
+  if (t.length < 4 || t.length > 160 || /^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(t)) return false;
+  return /\d/.test(t) || /\b(rua|r\.|av\.?|avenida|alameda|al\.|pra[cç]a|rodovia|rod\.|estrada|travessa|largo|bairro|shopping|centro|condom[ií]nio|edif[ií]cio|ed\.|padaria|loja|escrit[oó]rio|empresa|igreja|hotel|restaurante)\b/i.test(t)
+    || (t.includes(',') && palavras <= 12) || palavras <= 5;
+};
 const linkWaze = (l) => `https://waze.com/ul?q=${encodeURIComponent(l)}&navigate=yes`;
 const linkMapas = (l) => `https://maps.apple.com/?daddr=${encodeURIComponent(l)}&dirflg=d`;
 const mapaEmbed = (l) => `https://maps.google.com/maps?q=${encodeURIComponent(l)}&z=15&output=embed`;
@@ -623,17 +629,18 @@ function editarEvento(ev, sug) {
   const ini = ev && !ev.dia_inteiro ? horaISO(ev.inicio) : proximaHoraCheia();
   const fim = ev && ev.fim && !ev.dia_inteiro ? horaISO(ev.fim) : horaISO(new Date(Date.parse(montarISO(dia, ini)) + 3600e3));
   abrirFolha({
-    titulo: ev ? 'Editar compromisso' : 'Novo compromisso',
+    titulo: `${ev ? 'Editar compromisso' : 'Novo compromisso'}${Conta.agenda ? ` · agenda de ${(Conta.lista.find((c) => c.dono === Conta.agenda)?.nome || '').split(' ')[0]}` : ''}`,
     campos: [
       { rotulo: 'O quê', nome: 'titulo', valor: ev?.titulo ?? sug?.titulo, placeholder: 'Visita – cliente', obrigatorio: true },
       { tipo: 'data-hora', data: 'dia', hora: 'inicio', hora2: 'fim', vData: dia, vHora: ini, vHora2: fim, rotuloHora: 'Início' },
-      { rotulo: 'Onde', nome: 'local', valor: ev?.local ?? sug?.local, placeholder: 'Opcional' },
+      { rotulo: 'Onde', nome: 'local', valor: ev?.local ?? sug?.local, placeholder: 'Endereço (rua, número, cidade) para a rota no Waze/Maps' },
     ],
     salvar: async (f) => {
       if (!f.titulo?.trim() || !f.dia || !f.inicio) throw new Error('Preencha o quê, o dia e a hora.');
       let fimISO = montarISO(f.dia, f.fim || f.inicio);
       if (!f.fim || Date.parse(fimISO) <= Date.parse(montarISO(f.dia, f.inicio))) fimISO = new Date(Date.parse(montarISO(f.dia, f.inicio)) + 3600e3).toISOString();
       const corpo = { titulo: f.titulo.trim(), inicio: montarISO(f.dia, f.inicio), fim: fimISO, local: f.local?.trim() || '' };
+      if (!Agenda.google) throw new Error(Conta.lista.some((c) => c.agenda) ? 'Sua agenda não tem o Google ligado. Para marcar na agenda de quem compartilhou com você, escolha o nome no topo do calendário.' : 'Sua agenda não tem o Google ligado. Conecte em Avisos › Ajustes › Conectar Google Agenda.');
       await api(ev ? `/agenda/${encodeURIComponent(ev.id)}` : '/agenda', { metodo: 'POST', corpo });
       aviso(ev ? 'Compromisso atualizado.' : 'Compromisso marcado. O alarme toca 20 min antes.');
       Agenda.dia = f.dia; Agenda.mes = f.dia.slice(0, 7); Agenda.mexeu = Date.now(); Agenda.inicioSemana = null; await carregarSemana();
@@ -4247,6 +4254,12 @@ async function carregarContas() {
     const g = guardado.ler(`cerebro-conta-${o}`);
     Conta[o] = Conta.lista.some((c) => c.dono === g && c[o]) ? g : null;
   }
+  // Quem recebeu a agenda de alguém (ex.: secretária) e não tem Google próprio abre direto a agenda compartilhada,
+  // a menos que já tenha escolhido "Minha agenda" antes. Sem isso, ela marcava na própria agenda (sem Google) e falhava.
+  const compartilhada = Conta.lista.find((c) => c.agenda);
+  if (!Conta.agenda && compartilhada && guardado.ler('cerebro-conta-agenda') !== 'minha') {
+    try { const r = await api(`/agenda?de=${diaISO(new Date())}&dias=1`); if (r.google === false) Conta.agenda = compartilhada.dono; } catch { /* fica na própria */ }
+  }
 }
 function desenharSeletorConta(o) {
   const box = $(`#conta-${o}`); if (!box) return;
@@ -4258,7 +4271,7 @@ document.addEventListener('click', (e) => {
   for (const o of ['agenda', 'tarefas']) {
     const b = e.target.closest(`[data-conta-${o}]`); if (!b) continue;
     Conta[o] = b.getAttribute(`data-conta-${o}`) || null;
-    guardado.gravar(`cerebro-conta-${o}`, Conta[o]);
+    guardado.gravar(`cerebro-conta-${o}`, Conta[o] || 'minha');   // "minha" = escolheu a própria de propósito
     if (o === 'agenda') { Agenda.inicioSemana = null; carregarSemana().catch((err) => aviso(err.message)); }
     else carregarTarefas().catch((err) => aviso(err.message));
     return;
