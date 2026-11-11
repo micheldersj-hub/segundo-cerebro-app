@@ -2,7 +2,7 @@
 // Nada de dado fica só aqui: tudo é lido e gravado no mesmo servidor do app, por isso o que muda num aparece no outro.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-export const VERSAO = 'w4';
+export const VERSAO = 'w5';
 const PROJ = 'https://mavjbevuhzalkqyxaajw.supabase.co';
 const F = (n) => `${PROJ}/functions/v1/${n}`;
 // Chave anônima: pública por design (só permite entrar); os dados passam pelas funções, que conferem o login.
@@ -43,9 +43,19 @@ const ROTAS = [
   [/^\/rascunhos/, 'agendador'], [/^\/atendente/, 'atendente'], [/^\/tarefas/, 'tarefas', /^\/tarefas/], [/^\/olho/, 'olho', /^\/olho/],
   [/^\/consumo/, 'consumo', /^\/consumo/], [/^\/(dossies|local|proximas)/, 'oraculo'], [/^\/chat\//, 'chat', /^\/chat/],
 ];
+// Lê a sessão sem travar: se a biblioteca de login demorar mais de 4 s, usa a que já está em mãos (e não espera de novo).
+let sessaoTravada = false;
+export async function sessaoAtual() {
+  if (sessaoTravada && Sessao.sessao) return Sessao.sessao;
+  try {
+    const r = await Promise.race([SUPA.auth.getSession(), new Promise((ok) => setTimeout(() => ok(null), 4000))]);
+    if (!r) { sessaoTravada = true; return Sessao.sessao; }
+    return r.data.session;
+  } catch { return Sessao.sessao; }
+}
 export async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   const headers = {};
-  try { Sessao.sessao = (await SUPA.auth.getSession()).data.session; } catch { Sessao.sessao = null; }
+  Sessao.sessao = await sessaoAtual();
   if (Sessao.sessao) headers.authorization = `Bearer ${Sessao.sessao.access_token}`;
   if (/^\/agenda/.test(caminho) && Conta.vale('agenda')) headers['x-conta'] = Conta.atual;
   if (/^\/tarefas/.test(caminho) && Conta.vale('tarefas')) headers['x-conta'] = Conta.atual;

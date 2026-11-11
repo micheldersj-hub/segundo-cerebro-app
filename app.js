@@ -30,7 +30,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v47';
+const VERSAO = 'v48';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -66,9 +66,20 @@ document.getElementById('b-tema')?.addEventListener('click', () => {
 // ---------------------------------------------------------------------------
 // API
 // ---------------------------------------------------------------------------
+// Lê a sessão sem nunca travar o app: se a biblioteca de login demorar (já aconteceu no iPhone logo depois do link
+// de convite), usa a sessão que o app já tem em mãos.
+let sessaoTravada = false;   // a biblioteca já demorou uma vez nesta abertura do app: não espera de novo
+async function sessaoAtual() {
+  if (sessaoTravada && sessao) return sessao;
+  try {
+    const r = await Promise.race([SUPA.auth.getSession(), new Promise((ok) => setTimeout(() => ok(null), 4000))]);
+    if (!r) { sessaoTravada = true; return sessao; }
+    return r.data.session;
+  } catch { return sessao; }
+}
 async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   const headers = {};
-  try { sessao = (await SUPA.auth.getSession()).data.session; } catch { sessao = null; }
+  sessao = await sessaoAtual();
   if (sessao) headers.authorization = `Bearer ${sessao.access_token}`;
   else if (chave) headers['x-app-key'] = chave;
   let body;
@@ -90,7 +101,11 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   if (base === TAREFAS) caminho = caminho.replace(/^\/tarefas/, '');
   if (base === OLHO) caminho = caminho.replace(/^\/olho/, '');
   if (base === CONSUMO) caminho = caminho.replace(/^\/consumo/, '');
-  const res = await fetch(base + caminho, { method: metodo, headers, body });
+  const ctrl = new AbortController(), limite = setTimeout(() => ctrl.abort(), /^\/(gravacoes|voz|documento|exportar)/.test(caminho) ? 300000 : 120000);
+  let res;
+  try { res = await fetch(base + caminho, { method: metodo, headers, body, signal: ctrl.signal }); }
+  catch (err) { throw new Error(err.name === 'AbortError' ? 'O servidor demorou para responder. Confira a internet e tente de novo.' : 'Sem conexão com o servidor. Confira a internet.'); }
+  finally { clearTimeout(limite); }
   const dados = await res.json().catch(() => ({}));
   if (res.status === 401) { sair(); throw new Error(dados.erro || 'Sessão expirada. Entre de novo.'); }
   if (!res.ok) throw Object.assign(new Error(dados.erro || `Erro ${res.status}`), { codigo: dados.codigo, status: res.status });
@@ -2003,19 +2018,27 @@ $('#form-login').addEventListener('submit', async (e) => {
   finally { bt.disabled = false; bt.textContent = 'Entrar'; }
 });
 
+// Criar a senha (link de convite ou de nova senha). Grava pelo servidor (/equipe/senha), não pela biblioteca de login:
+// no iPhone ela chegou a travar nesse passo depois do link, e o botão ficava parado sem enviar nada.
 $('#form-senha').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const erro = e.currentTarget.querySelector('[data-erro]');
+  const form = e.currentTarget, erro = form.querySelector('[data-erro]'), bt = form.querySelector('button[type=submit]');
+  if (bt.disabled) return;
   const a = $('#nova-senha').value, b = $('#nova-senha2').value;
+  erro.textContent = '';
   if (a.length < 8) { erro.textContent = 'A senha precisa ter pelo menos 8 caracteres.'; return; }
   if (a !== b) { erro.textContent = 'As duas senhas não estão iguais.'; return; }
-  const { error } = await SUPA.auth.updateUser({ password: a });
-  if (error) { erro.textContent = /same|different/i.test(error.message) ? 'Use uma senha diferente da anterior.' : error.message; return; }
-  sessao = (await SUPA.auth.getSession()).data.session;
-  $('#nova-senha').value = ''; $('#nova-senha2').value = '';
-  await carregarEu();
-  aviso('Senha criada. Bem-vindo!');
-  iniciar();
+  if (!sessao) { mostrarEntrar('login', 'Este link expirou. Peça um novo ao administrador.'); return; }
+  bt.disabled = true; bt.textContent = 'Salvando…';
+  try {
+    await api('/equipe/senha', { metodo: 'POST', corpo: { senha: a } });
+    $('#nova-senha').value = ''; $('#nova-senha2').value = '';
+    await carregarEu();
+    aviso('Senha criada. Bem-vindo!');
+    iniciar();
+  } catch (err) {
+    erro.textContent = /expirada/i.test(err.message) ? 'Este link expirou. Peça um novo ao administrador.' : err.message;
+  } finally { bt.disabled = false; bt.textContent = 'Salvar e entrar'; }
 });
 
 /** Abre a sessão a partir de um link de acesso (convite ou redefinição) e pede a senha. */
@@ -2163,7 +2186,7 @@ async function comecar() {
     if (await usarCodigoDeAcesso(decodeURIComponent(codigo[1]))) return;
     return;
   }
-  try { sessao = (await SUPA.auth.getSession()).data.session; } catch { sessao = null; }
+  sessao = await sessaoAtual();
   if (sessao) {
     await carregarEu();
     if (eu) { iniciar(); return; }

@@ -1,5 +1,5 @@
 // Dimy Web — entrada: login, rotas, tema, contadores do menu e verificação de versão nova.
-import { $, $$, api, aviso, Conta, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
+import { $, $$, api, aviso, Conta, sessaoAtual, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
 import * as Hoje from './hoje.js';
 import * as Agenda from './agenda.js';
 import * as Tarefas from './tarefas.js';
@@ -119,7 +119,7 @@ async function verificarVersao() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersao(); });
 
 (async function comecar() {
-  try { Sessao.sessao = (await SUPA.auth.getSession()).data.session; } catch { Sessao.sessao = null; }
+  Sessao.sessao = await sessaoAtual();
   if (Sessao.sessao) { await carregarEu(); if (Sessao.eu) { iniciar(); return; } await SUPA.auth.signOut().catch(() => {}); Sessao.sessao = null; }
   if (Sessao.chave) { try { await api('/hoje'); iniciar(); return; } catch { Sessao.chave = null; } }
   mostrarEntrar();
