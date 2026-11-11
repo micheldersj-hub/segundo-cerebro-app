@@ -305,3 +305,89 @@ a.agora-item:hover { filter: brightness(.97); } .agora-item small { font-size: 1
 .lista-pessoas, .lista-simples, .tfl-lista { align-content: start; }   /* itens juntos no topo, sem espalhar pela coluna */
 .tf-area.com-lado .tf-quadro, .tf-area.com-lado .tf-quadro.com-atrasadas { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .tag { white-space: nowrap; }
+
+/* ===== w2: menu em grupos, Agenda, compromissos em Tarefas e correção dos cartões ===== */
+:root { --lateral: 232px; }
+.menu { gap: 1px; }
+.menu-grupo { margin: 14px 12px 4px; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-fraca); }
+.menu-grupo:first-child { margin-top: 4px; }
+.menu a { padding: 9px 12px; gap: 12px; position: relative; }
+.menu a svg { width: 20px; height: 20px; color: var(--tinta-fraca); transition: color .15s; }
+.menu a:hover svg { color: var(--tinta-suave); }
+.menu a.on { font-weight: 700; } .menu a.on svg { color: var(--mar); }
+.menu a.on::before { content: ''; position: absolute; left: -14px; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--mar); }
+.menu a span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Botões com ícone: ícone um pouco menor e alinhado */
+.btn svg { width: 17px; height: 17px; }
+.btn.destaque { background: var(--roxo-claro); color: var(--roxo); }
+.cab-acoes { align-items: center; }
+
+/* Abas com ícone (Olho de Deus e Oráculo) */
+.abas svg { width: 16px; height: 16px; opacity: .8; } .abas .on svg { opacity: 1; }
+
+/* Seletor Dia | Semana | Mês */
+.seg { display: inline-flex; background: var(--superficie-2); border-radius: 12px; padding: 3px; gap: 2px; }
+.seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 14px; color: var(--tinta-suave); cursor: pointer; }
+.seg button svg { width: 16px; height: 16px; } .seg button:hover { color: var(--tinta); }
+.seg button.on { background: var(--superficie); color: var(--mar-forte); box-shadow: var(--sombra); }
+
+/* ---- Agenda ---- */
+.ag-nav { display: flex; align-items: center; gap: 6px; margin: -4px 0 14px; }
+.ag-resumo { margin-left: 10px; color: var(--tinta-suave); font-weight: 600; font-size: 14px; }
+.ag-area { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
+.ag-vista { padding: 0; overflow: hidden; min-width: 0; } .ag-vista.modo-mes { padding: 12px; }
+.ag-lado { position: sticky; top: 20px; display: grid; gap: 14px; max-height: calc(100vh - 40px); overflow-y: auto; }
+.ag-prox-dia h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--tinta-suave); margin: 14px 0 8px; } .ag-prox-dia:first-child h3 { margin-top: 2px; }
+.ag-prox-dia .ev-cartao { padding: 8px 12px; }
+.ag-mes .cal-dia { min-height: 108px; } .ag-mes .cal-ev { text-align: left; }
+.cal-ev.c1 { background: var(--azul-claro); color: var(--azul); } .cal-ev.c2 { background: var(--roxo-claro); color: var(--roxo); } .cal-ev.c3 { background: var(--ambar-claro); color: var(--txt-ambar); } .cal-ev.c4 { background: var(--rosa-claro); color: var(--rosa); }
+.ag-grade { --h: 60px; display: grid; }
+.ag-cab, .ag-inteiro { display: grid; grid-template-columns: 58px repeat(var(--dias), minmax(0, 1fr)); border-bottom: 1px solid var(--linha); }
+.ag-cab-dia { border: 0; background: none; padding: 10px 4px 8px; display: grid; justify-items: center; gap: 2px; cursor: pointer; color: var(--tinta-suave); border-left: 1px solid var(--linha); }
+.ag-cab-dia small { font-size: 12px; font-weight: 700; text-transform: uppercase; } .ag-cab-dia b { font-size: 19px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--tinta); }
+.ag-cab-dia:hover b { background: var(--superficie-2); } .ag-cab-dia.hoje small { color: var(--mar-forte); } .ag-cab-dia.hoje b { background: var(--mar); color: #fff; }
+.ag-cab-dia.fds { background: var(--fundo); }
+.ag-inteiro > span { font-size: 11px; font-weight: 700; color: var(--tinta-fraca); padding: 6px 4px; text-align: right; }
+.ag-inteiro > div { border-left: 1px solid var(--linha); padding: 4px; display: grid; gap: 3px; align-content: start; min-width: 0; }
+.ag-ev-inteiro { border: 0; border-radius: 6px; background: var(--mar-claro); color: var(--mar-forte); font-weight: 700; font-size: 12px; padding: 3px 7px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-corpo { display: grid; grid-template-columns: 58px repeat(var(--dias), minmax(0, 1fr)); max-height: calc(100vh - 250px); min-height: 360px; overflow-y: auto; position: relative; }
+.ag-horas span { display: block; height: var(--h); font-size: 11.5px; font-weight: 700; color: var(--tinta-fraca); text-align: right; padding-right: 8px; transform: translateY(-7px); }
+.ag-horas span:first-child { visibility: hidden; }
+.ag-ev.alto b { -webkit-line-clamp: 4; }
+.ag-col { position: relative; height: calc(var(--h) * var(--horas)); border-left: 1px solid var(--linha); cursor: cell;
+  background-image: repeating-linear-gradient(to bottom, var(--linha) 0 1px, transparent 1px var(--h)); }
+.ag-col.hoje { background-color: color-mix(in srgb, var(--mar-claro) 45%, transparent); }
+.ag-ev { position: absolute; display: grid; align-content: start; gap: 1px; border: 0; border-left: 3px solid var(--mar); border-radius: 8px; background: var(--mar-claro); color: var(--tinta); padding: 4px 7px; text-align: left; cursor: pointer; overflow: hidden; z-index: 1; min-height: 20px; }
+.ag-ev:hover { filter: brightness(.96); z-index: 2; box-shadow: var(--sombra); }
+.ag-ev b { font-size: 12.5px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.ag-ev small { font-size: 11.5px; color: var(--tinta-suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-ev.curto { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 6px; padding: 1px 6px; } .ag-ev.curto b { -webkit-line-clamp: 1; order: 2; } .ag-ev.curto small { order: 1; }
+.ag-ev.c1 { border-color: var(--azul); background: var(--azul-claro); } .ag-ev.c2 { border-color: var(--roxo); background: var(--roxo-claro); } .ag-ev.c3 { border-color: var(--ambar); background: var(--ambar-claro); } .ag-ev.c4 { border-color: var(--rosa); background: var(--rosa-claro); }
+.ag-ev.passou { opacity: .55; }
+.ag-agora { position: absolute; left: -1px; right: 0; height: 2px; background: var(--vermelho); z-index: 3; pointer-events: none; } .ag-agora::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--vermelho); }
+.modo-dia .ag-ev b { -webkit-line-clamp: 2; font-size: 14px; } .modo-dia .ag-ev small { font-size: 12.5px; }
+
+/* ---- Tarefas: compromissos do dia ---- */
+.tf-agenda { display: flex; align-items: center; gap: 10px; background: var(--superficie); border-radius: 14px; box-shadow: var(--sombra); padding: 8px 8px 8px 14px; margin-bottom: 12px; min-width: 0; }
+.tf-ag-cab { display: inline-flex; align-items: center; gap: 7px; color: var(--tinta); text-decoration: none; white-space: nowrap; font-size: 14px; } .tf-ag-cab svg { color: var(--mar); } .tf-ag-cab:hover b { text-decoration: underline; }
+.tf-ag-lista { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; padding: 2px; }
+.tf-ag-ev { flex: none; display: inline-flex; align-items: center; gap: 7px; max-width: 320px; border: 0; border-radius: 10px; background: var(--superficie-2); padding: 6px 11px; cursor: pointer; font-size: 13.5px; }
+.tf-ag-ev span { font-weight: 800; color: var(--mar-forte); white-space: nowrap; font-size: 12.5px; } .tf-ag-ev b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-ag-ev:hover { background: var(--mar-claro); } .tf-ag-ev.passou { opacity: .5; } .tf-ag-ev.agora { box-shadow: inset 0 0 0 2px var(--mar); }
+.tf-ag-vazio { flex: 1; color: var(--tinta-suave); font-size: 13.5px; }
+
+/* ---- Correção: cartão de tarefa não pode passar da coluna (texto longo empurrava a largura) ---- */
+.tf-col { min-width: 0; }
+.tf-cards { grid-template-columns: minmax(0, 1fr); }
+.tf-card { min-width: 0; }
+.tf-nota { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.tf-corpo .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tf-topo { min-width: 0; } .tf-semana { min-width: 0; }
+
+@media (max-width: 1360px) { .ag-area { grid-template-columns: minmax(0, 1fr) 280px; } }
+@media (max-width: 1180px) { .ag-area { grid-template-columns: 1fr; } .ag-lado { position: static; max-height: none; } }
+@media (max-width: 980px) {
+  .menu a { font-size: 14.5px; } .menu a span, .menu-grupo { display: none; } .menu a.on::before { left: -10px; }
+  .seg button span { display: none; }
+}

@@ -1,13 +1,14 @@
 // Dimy Web — entrada: login, rotas, tema, contadores do menu e verificação de versão nova.
-import { $, $$, api, aviso, ehDono, guardado, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
+import { $, $$, api, aviso, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
 import * as Hoje from './hoje.js';
+import * as Agenda from './agenda.js';
 import * as Tarefas from './tarefas.js';
 import * as Conversa from './conversa.js';
 import * as Whats from './whats.js';
 import * as Oraculo from './oraculo.js';
 import * as Olho from './olho.js';
 
-const TELAS = { hoje: Hoje, tarefas: Tarefas, conversa: Conversa, whats: Whats, oraculo: Oraculo, olho: Olho };
+const TELAS = { hoje: Hoje, agenda: Agenda, tarefas: Tarefas, conversa: Conversa, whats: Whats, oraculo: Oraculo, olho: Olho };
 let atual = null;
 
 async function rota() {
@@ -29,7 +30,8 @@ export async function contadores(forcar = false) {
   if (!forcar && Date.now() - contEm < 25000) return;
   contEm = Date.now();
   const marca = (id, n) => { const b = $(id); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; };
-  const [h, t, o] = await Promise.allSettled([api('/hoje'), api('/tarefas'), api('/olho/painel')]);
+  const [h, t, o, ag] = await Promise.allSettled([api('/hoje'), api('/tarefas'), api('/olho/painel'), eventosDe(hoje(), 1)]);
+  if (ag.status === 'fulfilled') marca('#b-agenda', ag.value.eventos.filter((e) => Date.parse(e.fim || e.inicio) >= Date.now()).length);
   if (h.status === 'fulfilled') { marca('#b-whats', h.value.aguardando?.length || 0); marca('#b-hoje', (h.value.avisos || []).filter((a) => !a.read_at).length); }
   if (t.status === 'fulfilled') marca('#b-tarefas', t.value.tarefas.filter((x) => x.etapa !== 'feito').length + (t.value.atrasadas?.length || 0));
   if (o.status === 'fulfilled') { const a = o.value.kpis.alertas; marca('#b-olho', a.critico + a.alto + a.medio + a.baixo); }
@@ -89,13 +91,13 @@ $('#b-sair').addEventListener('click', () => { if (confirm('Sair do Dimy Web nes
 document.addEventListener('dimy:sair', () => { if (Sessao.logado) { Sessao.logado = false; mostrarEntrar('Sua sessão expirou. Entre de novo.'); } });
 
 addEventListener('hashchange', () => { if (Sessao.logado) rota(); });
-// Atalhos de teclado: g + h/t/c/w/o/e para trocar de tela; "/" busca na tela atual.
+// Atalhos de teclado: g + h/a/t/c/w/o/e para trocar de tela; "/" busca na tela atual.
 let g = 0;
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey || $('#janela').open) return;
   if (e.key === '/') { const b = $('#principal [data-busca]'); if (b) { e.preventDefault(); b.focus(); } return; }
   if (e.key === 'g') { g = Date.now(); return; }
-  if (Date.now() - g < 1200) { const destino = { h: 'hoje', t: 'tarefas', c: 'conversa', w: 'whats', o: 'oraculo', e: 'olho' }[e.key]; if (destino) location.hash = `#/${destino}`; g = 0; }
+  if (Date.now() - g < 1200) { const destino = { h: 'hoje', a: 'agenda', t: 'tarefas', c: 'conversa', w: 'whats', o: 'oraculo', e: 'olho' }[e.key]; if (destino) location.hash = `#/${destino}`; g = 0; }
 });
 
 // Versão nova publicada: recarrega quando a aba volta ao foco e não há nada aberto.

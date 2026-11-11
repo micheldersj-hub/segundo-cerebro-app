@@ -9,3 +9,9 @@ funções do servidor (Supabase), então tudo o que muda aqui aparece no app e v
 - `js/exportar.js` e `vendor/` vêm do app (mesmo gerador de PDF/CSV).
 - Versão: `VERSAO` em `js/base.js` e `versao.json` (o site recarrega sozinho quando muda); `?v=` em `index.html`.
 - Testes: `segundo-c-rebro/tools/ui/web_telas.mjs` (1440 e 1280 px, claro e escuro).
+
+## w2 (11/11)
+- Tela **Agenda** no menu (dia, semana e mês; clique num horário vazio para marcar). Atalho g + a.
+- Tarefas mostra os compromissos do dia escolhido acima do quadro.
+- Menu em grupos (Seu dia, Conversas, Inteligência) e ícones nas abas.
+- Correção: cartão com anotação longa não passa mais por cima da coluna vizinha.

@@ -14,7 +14,7 @@
     // Tema antes de pintar (evita piscar): claro, escuro ou automático.
     try { const t = localStorage.getItem('dimyweb-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch {}
   </script>
-  <link rel="stylesheet" href="css/dimy.css?v=1">
+  <link rel="stylesheet" href="css/dimy.css?v=2">
 </head>
 <body>
   <!-- Entrar -->
@@ -39,12 +39,16 @@
     <aside class="lateral" aria-label="Menu">
       <div class="marca"><span class="marca-ic">D</span><span>Dimy <small>Web</small></span></div>
       <nav class="menu">
-        <a href="#/hoje" data-menu="hoje"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje<i class="badge" id="b-hoje" hidden></i></a>
-        <a href="#/tarefas" data-menu="tarefas"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Tarefas<i class="badge" id="b-tarefas" hidden></i></a>
-        <a href="#/conversa" data-menu="conversa"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></svg>Conversa com o Dimy</a>
-        <a href="#/whats" data-menu="whats" class="so-dono"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>WhatsApp<i class="badge" id="b-whats" hidden></i></a>
-        <a href="#/oraculo" data-menu="oraculo"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Oráculo</a>
-        <a href="#/olho" data-menu="olho"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Olho de Deus<i class="badge alerta" id="b-olho" hidden></i></a>
+        <p class="menu-grupo">Seu dia</p>
+        <a href="#/hoje" data-menu="hoje"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Hoje</span><i class="badge" id="b-hoje" hidden></i></a>
+        <a href="#/agenda" data-menu="agenda"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/></svg><span>Agenda</span><i class="badge" id="b-agenda" hidden></i></a>
+        <a href="#/tarefas" data-menu="tarefas"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="m8 11 2 2 4-4M8 17h8"/></svg><span>Tarefas</span><i class="badge" id="b-tarefas" hidden></i></a>
+        <p class="menu-grupo">Conversas</p>
+        <a href="#/conversa" data-menu="conversa"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></svg><span>Dimy</span></a>
+        <a href="#/whats" data-menu="whats" class="so-dono"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2Z"/></svg><span>WhatsApp</span><i class="badge" id="b-whats" hidden></i></a>
+        <p class="menu-grupo">Inteligência</p>
+        <a href="#/oraculo" data-menu="oraculo"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 3l5 5h-5Z"/><circle cx="16.5" cy="15.5" r="3"/><path d="m21 20-2.3-2.3"/></svg><span>Oráculo</span></a>
+        <a href="#/olho" data-menu="olho"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span>Olho de Deus</span><i class="badge alerta" id="b-olho" hidden></i></a>
       </nav>
       <div class="lateral-pe">
         <p class="sincronia" id="sincronia" title="O Dimy Web e o app usam os mesmos dados"><i></i><span>Sincronizado</span></p>
@@ -67,6 +71,6 @@
     </form>
   </dialog>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script type="module" src="js/main.js?v=1"></script>
+  <script type="module" src="js/main.js?v=2"></script>
 </body>
 </html>

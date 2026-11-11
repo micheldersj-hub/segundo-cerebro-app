@@ -1,10 +1,10 @@
 // Olho de Deus: inteligência de mercado. Abas (visão, alertas, empresas, movimentos, histórico, ajustes) e o detalhe
 // de empresa ou movimento num painel ao lado. Tudo vem do servidor (coleta programada); nada de demonstração.
-import { $, abrirJanela, api, aviso, esc, ha, quando } from './base.js';
+import { $, abrirJanela, api, aviso, esc, ha, IC, quando } from './base.js';
 
 export const titulo = 'Olho de Deus';
 const O = { aba: 'visao', cfg: null, admin: false, empresas: [], fEmp: { categoria: '', segmento: '', q: '' }, fMov: { relevancia: '', filtro: '', dias: '30', segmento: '', categoria: '' }, fAl: { nivel: '', nao_lidos: '1' }, lado: null };
-const ABAS = [['visao', 'Visão geral'], ['alertas', 'Alertas'], ['empresas', 'Empresas'], ['movimentos', 'Movimentos'], ['historico', 'Histórico'], ['ajustes', 'Ajustes']];
+const ABAS = [['visao', 'Visão geral', 'grafico'], ['alertas', 'Alertas', 'alerta'], ['empresas', 'Empresas', 'predio'], ['movimentos', 'Movimentos', 'pulso'], ['historico', 'Histórico', 'historico'], ['ajustes', 'Ajustes', 'ajustes']];
 const NIVEL = { critico: 'Crítico', alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
 const CAT = { concorrente: 'Concorrente', similar: 'Similar', candidata: 'Em análise', descartada: 'Descartada' };
 const TIPO_MOV = { produto: 'Produto', preco_taxa: 'Preço/taxa', parceria: 'Parceria', expansao: 'Expansão', campanha: 'Campanha', estrategia: 'Estratégia', infraestrutura: 'Infraestrutura', regulatorio: 'Regulação', mercado: 'Mercado', oportunidade: 'Oportunidade' };
@@ -22,7 +22,7 @@ export async function abrir(alvo, [aba, id]) {
     el = alvo;
     el.innerHTML = `
       <header class="cab"><div><p class="cab-sup">Inteligência de mercado da B2B PAY</p><h1>Olho de Deus</h1></div></header>
-      <nav class="abas" id="ol-abas">${ABAS.map(([k, t]) => `<a href="#/olho/${k}" data-ol-aba="${k}">${t}${k === 'alertas' ? ' <i class="badge alerta" id="ol-n" hidden></i>' : ''}</a>`).join('')}</nav>
+      <nav class="abas" id="ol-abas">${ABAS.map(([k, t, ic]) => `<a href="#/olho/${k}" data-ol-aba="${k}">${IC[ic]}${t}${k === 'alertas' ? ' <i class="badge alerta" id="ol-n" hidden></i>' : ''}</a>`).join('')}</nav>
       <div class="ol-area"><div id="ol-corpo" class="ol-corpo"></div><aside class="ol-lado" id="ol-lado" hidden><header><span id="ol-lado-t"></span><button class="ic-btn" data-ol-fechar aria-label="Fechar">×</button></header><div id="ol-lado-corpo"></div></aside></div>`;
     el.onclick = clique; el.onchange = mudou; el.onsubmit = enviar;
   }
@@ -123,6 +123,7 @@ async function lado(tipo, id) {
   $('#ol-lado-corpo').innerHTML = '<p class="carregando">Carregando…</p>';
   if (tipo === 'empresa') {
     const { empresa: e, historico: hist, movimentos: movs, execucoes } = await api(`/olho/empresas/${id}`);
+    if (!e) { $('#ol-lado-corpo').innerHTML = '<p class="vazio">Não achei essa empresa. Ela pode ter sido removida; atualize a lista.</p>'; return; }
     const site = urlSegura(e.site), perfil = e.perfil || {}, preench = CAMPOS.filter(([c]) => perfil[c] != null && String(perfil[c]).trim() && !(Array.isArray(perfil[c]) && !perfil[c].length));
     const abertas = execucoes.filter((x) => ['fila', 'rodando'].includes(x.status));
     $('#ol-lado-t').textContent = e.nome;
@@ -142,6 +143,7 @@ async function lado(tipo, id) {
       <h3>Histórico de mudanças</h3><ol class="mudancas">${hist.map((h) => `<li><small>${esc(quando(h.created_at))}</small>${(h.mudancas || []).length ? h.mudancas.map((m) => `<b>${esc((CAMPOS.find(([c]) => c === m.campo) || [, m.campo])[1])}</b>`).join(', ') + ' mudou' : ' sem mudanças'}</li>`).join('') || '<li class="dica">Ainda não há duas coletas para comparar.</li>'}</ol>`;
   } else {
     const { movimento: m } = await api(`/olho/movimentos/${id}`);
+    if (!m) { $('#ol-lado-corpo').innerHTML = '<p class="vazio">Não achei esse movimento; atualize a lista.</p>'; return; }
     const a = m.analise || {}, u = urlSegura(m.url), bloco = (r, t) => (t ? `<dt>${r}</dt><dd>${esc(t)}</dd>` : '');
     $('#ol-lado-t').textContent = TIPO_MOV[m.tipo] || 'Movimento';
     $('#ol-lado-corpo').innerHTML = `<p class="cab-chips"><span class="nivel n-${m.relevancia}">${NIVEL[m.relevancia]}</span>${m.ameaca ? '<i class="flag ameaca">ameaça</i>' : ''}${m.oportunidade ? '<i class="flag oport">oportunidade</i>' : ''}<small>${esc(m.empresa || 'Mercado')} · ${m.data_evento ? dataBR(m.data_evento) : `detectado ${ha(m.created_at)}`}</small></p>

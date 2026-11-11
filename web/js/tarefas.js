@@ -1,6 +1,6 @@
 // Tarefas: quadro A fazer → Fazendo → Feito com arrastar e soltar, dia a dia; atrasadas e prazos; detalhe ao lado
 // (subtarefas, anotações, histórico); projetos, lixeira e sugestões do Dimy. Mesmas rotas do app.
-import { $, $$, abrirJanela, api, aviso, esc, ha, hoje, leve, maiuscula, nomeDia, quando, somaDias } from './base.js';
+import { $, $$, abrirJanela, api, aviso, editarEvento, esc, eventosDe, ha, hoje, horaISO, IC, leve, maiuscula, nomeDia, quando, somaDias } from './base.js';
 
 export const titulo = 'Tarefas';
 const ETAPAS = [{ id: 'a_fazer', nome: 'A fazer', cor: 'azul', vazio: 'Nada para começar.' }, { id: 'fazendo', nome: 'Fazendo', cor: 'ambar', vazio: 'Arraste uma tarefa para cá ao começar.' }, { id: 'feito', nome: 'Feito', cor: 'verde', vazio: 'O que você concluir aparece aqui.' }];
@@ -31,15 +31,16 @@ export async function abrir(alvo) {
     <header class="cab">
       <div><p class="cab-sup">Tarefas</p><h1 id="tf-dia"></h1></div>
       <div class="cab-acoes">
-        <button class="btn claro" data-tf-painel="sugestoes" id="tf-b-sug" hidden></button>
-        <button class="btn claro" data-tf-painel="projetos">Projetos</button>
-        <button class="btn claro" data-tf-painel="lixeira">Lixeira</button>
+        <button class="btn claro destaque" data-tf-painel="sugestoes" id="tf-b-sug" hidden></button>
+        <button class="btn claro" data-tf-painel="projetos">${IC.projeto}Projetos</button>
+        <button class="btn claro" data-tf-painel="lixeira">${IC.lixeira}Lixeira</button>
       </div>
     </header>
     <div class="tf-topo">
       <div class="tf-semana"><button class="ic-btn" data-tf-dia="-7" aria-label="Semana anterior"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button><div id="tf-semana" class="tf-dias"></div><button class="ic-btn" data-tf-dia="7" aria-label="Próxima semana"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button></div>
       <div class="tf-progresso"><div class="barra"><span id="tf-barra"></span></div><small id="tf-prog"></small></div>
     </div>
+    <section class="tf-agenda" id="tf-agenda" aria-label="Compromissos do dia"></section>
     <form id="tf-nova" class="tf-nova">
       <button type="button" class="tf-pri" id="tf-pri" data-p="2" title="Prioridade alta (clique para ligar)" aria-label="Prioridade normal">!</button>
       <input id="tf-titulo" placeholder="Nova tarefa… (Enter para adicionar)" autocomplete="off" maxlength="300" data-busca aria-label="Nova tarefa">
@@ -70,9 +71,27 @@ export async function abrir(alvo) {
   $('#tf-titulo').addEventListener('keydown', (e) => { if (e.key === 'Escape') e.target.blur(); });
   await carregar(T.dia || hoje());
 }
-export async function atualizar() { if (el?.isConnected) { await carregar(T.dia); if (T.painel === 'detalhe' && T.detalhe) await desenharDetalhe(); } }
+export async function atualizar() { if (el?.isConnected) { await carregar(T.dia, true); if (T.painel === 'detalhe' && T.detalhe) await desenharDetalhe(); } }
 
-async function carregar(dia) { T.dia = dia; desenhar(await api(`/tarefas?dia=${dia}`)); }
+async function carregar(dia, forcar = false) {
+  T.dia = dia;
+  const [d] = await Promise.all([api(`/tarefas?dia=${dia}`), eventosDe(dia, 1, forcar).then((r) => (T.agenda = r)).catch((e) => (T.agenda = { erro: e.message }))]);
+  desenhar(d); desenharAgenda();
+}
+// Compromissos do dia escolhido (Google Agenda), para planejar as tarefas em volta deles.
+function desenharAgenda() {
+  const box = $('#tf-agenda'), a = T.agenda, h = hoje(); if (!box || !a) return;
+  const rot = T.dia === h ? 'Agenda de hoje' : `Agenda de ${rotuloDia(T.dia).split(',')[0].toLowerCase()}`;
+  const cab = `<a class="tf-ag-cab" href="#/agenda/dia/${T.dia}" title="Abrir a agenda">${IC.cal}<b>${rot}</b></a>`;
+  if (a.erro) { box.innerHTML = `${cab}<span class="tf-ag-vazio">Não consegui ler a agenda agora.</span>`; return; }
+  if (!a.google) { box.innerHTML = `${cab}<span class="tf-ag-vazio">Conecte o Google no app para ver seus compromissos aqui.</span>`; return; }
+  const evs = [...a.eventos].sort((x, y) => x.inicio.localeCompare(y.inicio)), agora = Date.now();
+  box.innerHTML = cab + (evs.length ? `<div class="tf-ag-lista">${evs.map((e) => {
+    const passou = Date.parse(e.fim || e.inicio) < agora, ja = !passou && Date.parse(e.inicio) <= agora;
+    return `<button class="tf-ag-ev ${passou ? 'passou' : ''} ${ja ? 'agora' : ''}" data-tf-evento="${esc(e.id)}" title="${esc(e.local || e.titulo)}"><span>${e.dia_inteiro ? 'Dia todo' : `${horaISO(e.inicio)}${e.fim ? `–${horaISO(e.fim)}` : ''}`}</span><b>${esc(e.titulo)}</b></button>`;
+  }).join('')}</div>` : '<span class="tf-ag-vazio">Nenhum compromisso neste dia.</span>')
+    + `<button class="ic-btn" data-tf-novo-evento title="Marcar compromisso" aria-label="Marcar compromisso">${IC.mais}</button>`;
+}
 const porId = (id) => [...(T.dados?.tarefas || []), ...(T.dados?.atrasadas || []), ...(T.dados?.prazos || [])].find((t) => t.id === id);
 async function mudar(id, corpo, msg) { await api(`/tarefas/${id}`, { metodo: 'POST', corpo }); if (msg) aviso(msg); await carregar(T.dia); document.dispatchEvent(new Event('dimy:mudou')); }
 
@@ -115,7 +134,7 @@ function desenhar(d) {
   $('#tf-barra').style.width = `${ts.length ? Math.round((feitas / ts.length) * 100) : 0}%`;
   $('#tf-prog').textContent = ts.length ? `${feitas} de ${ts.length} feitas` : 'Nenhuma tarefa neste dia';
   const nSug = d.sugestoes_pendentes || 0;
-  $('#tf-b-sug').hidden = !nSug; $('#tf-b-sug').textContent = `✨ ${nSug} sugest${nSug > 1 ? 'ões' : 'ão'} do Dimy`;
+  $('#tf-b-sug').hidden = !nSug; $('#tf-b-sug').innerHTML = `${IC.brilho}${nSug} sugest${nSug > 1 ? 'ões' : 'ão'} do Dimy`;
   const noDia = new Set([...ts, ...d.atrasadas].map((t) => t.id));
   const fora = d.dia === h ? [...d.atrasadas, ...(d.prazos || []).filter((t) => !noDia.has(t.id))] : [];
   const pend = ts.filter((t) => t.etapa !== 'feito').length + (d.dia === h ? d.atrasadas.length : 0);
@@ -199,6 +218,12 @@ async function painel(modo) {
 }
 
 async function clique(e) {
+  const ev = e.target.closest('[data-tf-evento],[data-tf-novo-evento]');
+  if (ev) {
+    const voltar = () => { carregar(T.dia, true); document.dispatchEvent(new Event('dimy:mudou')); };
+    const item = T.agenda?.eventos?.find((i) => i.id === ev.dataset.tfEvento);
+    editarEvento(item || null, { dia: T.dia, depois: voltar }); return;
+  }
   const x = e.target.closest('[data-tf-dia],[data-tf-ir],[data-tf-acao],[data-tf-painel],[data-tfl-fechar],[data-tf-trazer],[data-tf-adiar-todas],[data-tf-editar],[data-tfd-adiar],[data-tfl-projeto],[data-tfl-dia],[data-tfl-restaurar],[data-tfl-excluir],[data-tfl-aceitar],[data-tfl-descartar],[data-tfs-feita],[data-tfs-apagar],#tf-pri,#tf-dia');
   if (!x) return;
   const d = x.dataset;

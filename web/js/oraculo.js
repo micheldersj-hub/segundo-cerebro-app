@@ -1,13 +1,13 @@
 // Oráculo: pesquisa de empresas (dossiês) e empresas perto de você. Lista à esquerda, dossiê à direita.
 // Exportar PDF/CSV baixa direto no computador; e-mail sai pelo seu Gmail; WhatsApp pelo fluxo de encaminhar do servidor.
-import { $, abrirJanela, api, aviso, diaISO, editarEvento, editarLembrete, esc, hoje, iniciais, somaDias, TZ } from './base.js';
+import { $, abrirJanela, api, aviso, diaISO, IC, editarEvento, editarLembrete, esc, hoje, iniciais, somaDias, TZ } from './base.js';
 
 export const titulo = 'Oráculo';
 const O = { lista: [], atual: null, timer: 0, perto: null, aba: 'abordagem' };
 const RISCO = { baixo: { t: 'Risco baixo', c: 'verde' }, medio: { t: 'Risco médio', c: 'ambar' }, alto: { t: 'Risco alto', c: 'vermelho' }, indefinido: { t: 'Risco indefinido', c: 'cinza' } };
 const TIPO_SINAL = { divida_federal: 'Dívida federal', divida_estadual: 'Dívida estadual', divida_municipal: 'Dívida municipal', protesto: 'Protesto', credito: 'Crédito', recuperacao_judicial: 'Recuperação judicial', judicial: 'Processo', trabalhista: 'Trabalhista', reputacao: 'Reputação', cadastral: 'Cadastro', outro: 'Outro' };
 const ETAPAS = ['Identificar empresa', 'Mercado e posicionamento', 'Reputação e finanças', 'Sócios e responsáveis', 'Dossiê e abordagem'];
-const ABAS = [['abordagem', 'Abordagem'], ['socios', 'Sócios'], ['empresa', 'Empresa e mercado'], ['riscos', 'Riscos'], ['fontes', 'Fontes']];
+const ABAS = [['abordagem', 'Abordagem', 'alvo'], ['socios', 'Sócios', 'pessoas'], ['empresa', 'Empresa e mercado', 'predio'], ['riscos', 'Riscos', 'escudo'], ['fontes', 'Fontes', 'link']];
 const fmtCnpj = (c) => String(c || '').replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
 const fmtReais = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }));
 const fmtData = (d) => (d ? new Date(`${String(d).slice(0, 10)}T12:00:00-03:00`).toLocaleDateString('pt-BR', { timeZone: TZ }) : '');
@@ -98,7 +98,7 @@ async function abrirDossie(id, silencioso = false) {
     </div>
     <div class="exportar"><span>Exportar</span><button class="btn claro" data-exp="pdf">PDF</button><button class="btn claro" data-exp="csv">CSV</button><button class="btn claro" data-exp="email">E-mail</button><button class="btn claro" data-or-acao="encaminhar">WhatsApp</button>
       ${d.envio?.status === 'enviado' ? `<small class="ok">Enviado no WhatsApp para ${esc(d.envio.nome)}</small>` : ''}</div>
-    <nav class="abas">${ABAS.map(([k, t]) => `<button class="${O.aba === k ? 'on' : ''}" data-or-aba="${k}">${t}</button>`).join('')}</nav>
+    <nav class="abas">${ABAS.map(([k, t, ic]) => `<button class="${O.aba === k ? 'on' : ''}" data-or-aba="${k}">${IC[ic]}${t}</button>`).join('')}</nav>
     <div class="dos-pane" id="or-pane">${pane(d, O.aba)}</div>`;
 }
 

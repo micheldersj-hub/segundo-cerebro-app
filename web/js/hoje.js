@@ -1,5 +1,5 @@
 // Hoje: calendário do mês com os compromissos, agenda do dia, o que pede você agora, quem espera resposta, lembretes e tarefas.
-import { $, api, avatar, diaISO, diaSemana, editarEvento, editarLembrete, eEndereco, esc, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js';
+import { $, api, avatar, diaISO, diaSemana, editarEvento, eventosDe, editarLembrete, eEndereco, esc, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js';
 
 export const titulo = 'Hoje';
 const H = { dia: hoje(), mes: hoje().slice(0, 7), eventos: [], google: true, dados: null, tarefas: null, olho: null, carregadoMes: '' };
@@ -24,7 +24,7 @@ export async function abrir(alvo) {
   el.innerHTML = `
     <header class="cab">
       <div><p class="cab-sup" id="h-saud"></p><h1 id="h-data"></h1></div>
-      <div class="cab-acoes"><button class="btn claro" data-h="lembrete">${IC.sino}Lembrete</button><button class="btn primario" data-h="evento">${IC.mais}Compromisso</button></div>
+      <div class="cab-acoes"><a class="btn claro" href="#/agenda">${IC.cal}Abrir agenda</a><button class="btn claro" data-h="lembrete">${IC.sino}Lembrete</button><button class="btn primario" data-h="evento">${IC.mais}Compromisso</button></div>
     </header>
     <div class="hoje-grade">
       <section class="cartao cal">
@@ -32,7 +32,7 @@ export async function abrir(alvo) {
         <div class="cal-letras">${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => `<span>${d}</span>`).join('')}</div>
         <div class="cal-mes" id="h-grade" role="grid"></div>
       </section>
-      <section class="cartao agenda-dia"><div class="sec-cab"><h2 id="h-agenda-t">Agenda</h2><button class="ic-btn" data-h="evento" aria-label="Novo compromisso">${IC.mais}</button></div><div id="h-agenda"></div></section>
+      <section class="cartao agenda-dia"><div class="sec-cab"><h2 id="h-agenda-t">Agenda</h2><a class="link" href="#/agenda/semana">Ver semana</a><button class="ic-btn" data-h="evento" aria-label="Novo compromisso">${IC.mais}</button></div><div id="h-agenda"></div></section>
       <aside class="hoje-lado">
         <section class="cartao"><div class="sec-cab"><h2>Agora</h2><span class="contador" id="h-agora-n"></span></div><div id="h-agora" class="agora"></div></section>
         <section class="cartao so-dono" id="h-espera-sec" hidden><div class="sec-cab"><h2 id="h-espera-t">Esperando você</h2><a class="link" href="#/whats">Abrir WhatsApp</a></div><ul id="h-espera" class="lista-pessoas"></ul></section>
@@ -58,8 +58,8 @@ async function carregarMes(forcar) {
   const { ini, dias } = grade(H.mes);
   const chave = `${ini}/${dias}`;
   if (forcar || chave !== H.carregadoMes) {
-    try { const r = await api(`/agenda?de=${ini}&dias=${dias}`); H.google = r.google; H.eventos = Array.isArray(r.eventos) ? r.eventos : []; H.carregadoMes = chave; }
-    catch (e) { H.eventos = []; }
+    try { const r = await eventosDe(ini, dias, forcar); H.google = r.google; H.eventos = r.eventos; H.carregadoMes = chave; H.erroAgenda = ''; }
+    catch (e) { H.eventos = []; H.erroAgenda = e.message; }
   }
   desenharMes(); desenharDia();
 }
@@ -84,6 +84,7 @@ function desenharDia() {
   const hj = hoje(), dia = H.dia;
   $('#h-agenda-t').textContent = dia === hj ? 'Agenda de hoje' : dia === somaDias(hj, 1) ? 'Agenda de amanhã' : maiuscula(nomeDia(dia, { weekday: 'long', day: 'numeric', month: 'short' }));
   const box = $('#h-agenda');
+  if (H.erroAgenda) { box.innerHTML = `<p class="vazio">Não consegui ler sua agenda agora (${esc(H.erroAgenda)}). Tento de novo em instantes.</p>`; return; }
   if (!H.google) { box.innerHTML = '<p class="vazio">Conecte o Google no app (Avisos › Ajustes) para ver sua agenda aqui.</p>'; return; }
   const evs = H.eventos.filter((e) => diaISO(e.inicio) === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
   if (!evs.length) { box.innerHTML = `<button class="vazio-cartao" data-h="evento">${IC.cal}<span>Dia livre<small>Clique para marcar um compromisso</small></span></button>`; return; }
