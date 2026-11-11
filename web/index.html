@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dimy Web</title>
+  <meta name="description" content="Dimy no computador: agenda, tarefas, conversas, WhatsApp, Oráculo e Olho de Deus. Sincronizado com o app.">
+  <meta name="theme-color" content="#0E9384">
+  <link rel="icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    // Tema antes de pintar (evita piscar): claro, escuro ou automático.
+    try { const t = localStorage.getItem('dimyweb-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch {}
+  </script>
+  <link rel="stylesheet" href="css/dimy.css?v=1">
+</head>
+<body>
+  <!-- Entrar -->
+  <main id="entrar" class="entrar" hidden>
+    <section class="entrar-caixa">
+      <div class="marca grande"><span class="marca-ic">D</span><span>Dimy <small>Web</small></span></div>
+      <p class="entrar-sub">Entre com o mesmo e-mail e senha do app. Tudo fica sincronizado.</p>
+      <form id="form-entrar" novalidate>
+        <label class="campo"><span>E-mail</span><input id="entrar-email" type="email" autocomplete="username" required></label>
+        <label class="campo"><span>Senha</span><input id="entrar-senha" type="password" autocomplete="current-password" required></label>
+        <p class="erro" id="entrar-erro" role="alert"></p>
+        <button class="btn primario largo" id="entrar-btn">Entrar</button>
+      </form>
+      <details class="entrar-chave"><summary>Usa a chave de acesso antiga?</summary>
+        <form id="form-chave"><label class="campo"><span>Chave de acesso</span><input id="entrar-chave" type="password" autocomplete="off"></label>
+          <button class="btn claro largo">Entrar com a chave</button></form></details>
+    </section>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <aside class="lateral" aria-label="Menu">
+      <div class="marca"><span class="marca-ic">D</span><span>Dimy <small>Web</small></span></div>
+      <nav class="menu">
+        <a href="#/hoje" data-menu="hoje"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Hoje<i class="badge" id="b-hoje" hidden></i></a>
+        <a href="#/tarefas" data-menu="tarefas"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>Tarefas<i class="badge" id="b-tarefas" hidden></i></a>
+        <a href="#/conversa" data-menu="conversa"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></svg>Conversa com o Dimy</a>
+        <a href="#/whats" data-menu="whats" class="so-dono"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/></svg>WhatsApp<i class="badge" id="b-whats" hidden></i></a>
+        <a href="#/oraculo" data-menu="oraculo"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Oráculo</a>
+        <a href="#/olho" data-menu="olho"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Olho de Deus<i class="badge alerta" id="b-olho" hidden></i></a>
+      </nav>
+      <div class="lateral-pe">
+        <p class="sincronia" id="sincronia" title="O Dimy Web e o app usam os mesmos dados"><i></i><span>Sincronizado</span></p>
+        <button class="lat-btn" id="b-tema" title="Tema"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18Z" fill="currentColor"/></svg><span id="tema-t">Tema automático</span></button>
+        <div class="eu"><span class="eu-av" id="eu-av">M</span><span class="eu-t"><b id="eu-nome">Michelder</b><small id="eu-email"></small></span>
+          <button class="lat-btn so-ic" id="b-sair" title="Sair" aria-label="Sair"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3"/></svg></button></div>
+      </div>
+    </aside>
+    <main class="principal" id="principal" tabindex="-1"></main>
+  </div>
+
+  <!-- Janela (formulários) -->
+  <dialog id="janela" class="janela" aria-labelledby="janela-titulo">
+    <form method="dialog" id="janela-form" novalidate>
+      <header><h2 id="janela-titulo"></h2><button type="button" class="fechar" data-fechar aria-label="Fechar">×</button></header>
+      <div id="janela-campos" class="janela-campos"></div>
+      <p class="erro" id="janela-erro" role="alert"></p>
+      <footer><button type="button" class="btn claro perigo-txt" id="janela-apagar" hidden>Apagar</button><span class="flex"></span>
+        <button type="button" class="btn claro" data-fechar>Cancelar</button><button class="btn primario" id="janela-ok" value="ok">Salvar</button></footer>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script type="module" src="js/main.js?v=1"></script>
+</body>
+</html>
