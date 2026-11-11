@@ -2,7 +2,7 @@
 // Nada de dado fica só aqui: tudo é lido e gravado no mesmo servidor do app, por isso o que muda num aparece no outro.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-export const VERSAO = 'w5';
+export const VERSAO = 'w6';
 const PROJ = 'https://mavjbevuhzalkqyxaajw.supabase.co';
 const F = (n) => `${PROJ}/functions/v1/${n}`;
 // Chave anônima: pública por design (só permite entrar); os dados passam pelas funções, que conferem o login.

@@ -168,7 +168,7 @@ function desenharPe() {
   const comigo = p.compartilhadas || [];
   $('#eq-pe').innerHTML = `${comigo.length ? `<p class="dica">${IC.link}<span>Compartilhado com você: ${comigo.map((c) => `<b>${esc(c.nome.split(' ')[0])}</b> (${[c.agenda && 'agenda', c.tarefas && 'tarefas'].filter(Boolean).join(' e ')})`).join(', ')}. Escolha a pessoa no topo da Agenda e das Tarefas.</span></p>` : ''}
     <button class="btn claro largo" data-eq="compartilhar">${IC.link}Compartilhar minha agenda e tarefas</button>
-    ${p.eu?.admin ? `<button class="btn claro largo" data-eq="convidar">${IC.pessoas}Convidar alguém para a equipe</button>` : ''}`;
+    ${p.eu?.admin ? `<button class="btn claro largo" data-eq="convidar">${IC.pessoas}Convidar ou gerar novo link</button>` : ''}`;
 }
 function novaConversa() {
   const equipe = E.pessoas?.equipe || [];
@@ -204,7 +204,7 @@ async function compartilhar() {
 }
 function convidar() {
   abrirJanela({
-    titulo: 'Convidar para a equipe',
+    titulo: 'Convidar ou gerar novo link',
     campos: [
       { rotulo: 'Nome', nome: 'nome', obrigatorio: true, placeholder: 'Ex.: Ana Souza' },
       { rotulo: 'E-mail', nome: 'email', tipoInput: 'email', obrigatorio: true, placeholder: 'ana@empresa.com.br' },
@@ -212,12 +212,23 @@ function convidar() {
     ],
     botao: 'Convidar',
     salvar: async (f) => {
-      const r = await api('/equipe/convidar', { metodo: 'POST', corpo: { nome: f.nome?.trim(), email: f.email?.trim() } });
+      const email = String(f.email || '').trim().toLowerCase();
+      let r;
+      try { r = await api('/equipe/convidar', { metodo: 'POST', corpo: { nome: f.nome?.trim(), email } }); }
+      catch (err) {
+        // Já está na equipe (ex.: o primeiro link venceu ou já foi usado): gera um link novo para a mesma pessoa.
+        if (err.status !== 409) throw err;
+        const { membros } = await api('/equipe');
+        const m = (membros || []).find((x) => String(x.email).toLowerCase() === email);
+        if (!m) throw err;
+        if (!m.ativo) throw new Error('Essa pessoa está bloqueada na equipe. Libere o acesso dela no app (Avisos › Equipe) e tente de novo.');
+        r = { ...(await api(`/equipe/${m.user_id}/link`, { metodo: 'POST' })), nome: m.nome, jaNaEquipe: true };
+      }
       await carregarPessoas(); await carregarConversas();
       const link = r.link || '';
       abrirJanela({
         titulo: 'Convite criado', botao: 'Copiar link',
-        campos: [{ tipo: 'html', html: `<p><b>${esc(r.nome)}</b> já está na equipe. Agora mande para ela este link (por WhatsApp ou e-mail). Ela abre no celular, cria a senha e já entra. <b>O link vale ${r.validade_min || 60} minutos</b>; se vencer, gere outro no app em Avisos › Equipe › "Novo link".</p>${link ? `<p class="eq-link">${esc(link)}</p>` : ''}<p class="dica">Depois que ela entrar, use "Compartilhar minha agenda e tarefas". No computador ela entra no Dimy Web com o mesmo e-mail e senha.</p>` }],
+        campos: [{ tipo: 'html', html: `<p>${r.jaNaEquipe ? `Gerei um <b>link novo</b> para <b>${esc(r.nome)}</b> (os anteriores deixam de valer).` : `<b>${esc(r.nome)}</b> já está na equipe.`} Agora mande para ela este link (por WhatsApp ou e-mail). Ela abre no celular, cria a senha e já entra. <b>O link vale ${r.validade_min || 60} minutos</b>; se vencer, gere outro no app em Avisos › Equipe › "Novo link".</p>${link ? `<p class="eq-link">${esc(link)}</p>` : ''}<p class="dica">Depois que ela entrar, use "Compartilhar minha agenda e tarefas". No computador ela entra no Dimy Web com o mesmo e-mail e senha.</p>` }],
         salvar: link ? async () => { await navigator.clipboard.writeText(link); aviso('Link copiado.'); return 'manter'; } : null,
       });
       return 'manter';
