@@ -217,7 +217,7 @@ function convidar() {
       const link = r.link || '';
       abrirJanela({
         titulo: 'Convite criado', botao: 'Copiar link',
-        campos: [{ tipo: 'html', html: `<p><b>${esc(r.nome)}</b> já está na equipe. Agora mande para ela este link (por WhatsApp ou e-mail). Ela abre no celular, cria a senha e já entra. <b>O link vale ${r.validade_min || 60} minutos</b>; se vencer, peça outro no app em Configuração › Equipe.</p>${link ? `<p class="eq-link">${esc(link)}</p>` : ''}<p class="dica">Depois que ela entrar, use "Compartilhar minha agenda e tarefas". No computador ela entra no Dimy Web com o mesmo e-mail e senha.</p>` }],
+        campos: [{ tipo: 'html', html: `<p><b>${esc(r.nome)}</b> já está na equipe. Agora mande para ela este link (por WhatsApp ou e-mail). Ela abre no celular, cria a senha e já entra. <b>O link vale ${r.validade_min || 60} minutos</b>; se vencer, gere outro no app em Avisos › Equipe › "Novo link".</p>${link ? `<p class="eq-link">${esc(link)}</p>` : ''}<p class="dica">Depois que ela entrar, use "Compartilhar minha agenda e tarefas". No computador ela entra no Dimy Web com o mesmo e-mail e senha.</p>` }],
         salvar: link ? async () => { await navigator.clipboard.writeText(link); aviso('Link copiado.'); return 'manter'; } : null,
       });
       return 'manter';
