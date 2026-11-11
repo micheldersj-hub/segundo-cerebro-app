@@ -1,6 +1,6 @@
 // Tarefas: quadro A fazer → Fazendo → Feito com arrastar e soltar, dia a dia; atrasadas e prazos; detalhe ao lado
 // (subtarefas, anotações, histórico); projetos, lixeira e sugestões do Dimy. Mesmas rotas do app.
-import { $, $$, abrirJanela, api, aviso, editarEvento, esc, eventosDe, ha, hoje, horaISO, IC, leve, maiuscula, nomeDia, quando, somaDias } from './base.js';
+import { $, $$, abrirJanela, api, aviso, Conta, editarEvento, esc, eventosDe, ha, hoje, horaISO, IC, leve, maiuscula, nomeDia, quando, seletorConta, somaDias } from './base.js';
 
 export const titulo = 'Tarefas';
 const ETAPAS = [{ id: 'a_fazer', nome: 'A fazer', cor: 'azul', vazio: 'Nada para começar.' }, { id: 'fazendo', nome: 'Fazendo', cor: 'ambar', vazio: 'Arraste uma tarefa para cá ao começar.' }, { id: 'feito', nome: 'Feito', cor: 'verde', vazio: 'O que você concluir aparece aqui.' }];
@@ -29,8 +29,8 @@ export async function abrir(alvo) {
   el = alvo;
   el.innerHTML = `
     <header class="cab">
-      <div><p class="cab-sup">Tarefas</p><h1 id="tf-dia"></h1></div>
-      <div class="cab-acoes">
+      <div><p class="cab-sup">${Conta.vale('tarefas') ? `Tarefas de ${esc(Conta.nome())}` : 'Tarefas'}</p><h1 id="tf-dia"></h1></div>
+      <div class="cab-acoes">${seletorConta('tarefas')}
         <button class="btn claro destaque" data-tf-painel="sugestoes" id="tf-b-sug" hidden></button>
         <button class="btn claro" data-tf-painel="projetos">${IC.projeto}Projetos</button>
         <button class="btn claro" data-tf-painel="lixeira">${IC.lixeira}Lixeira</button>
@@ -188,7 +188,7 @@ async function desenharDetalhe() {
     <form data-tfs="nova" class="linha-form"><input name="v" maxlength="200" placeholder="Nova subtarefa…" autocomplete="off"><button class="btn primario">Adicionar</button></form>
     <h3>Anotações e histórico</h3>
     <form data-tfs="nota" class="linha-form"><input name="v" maxlength="1000" placeholder="Escreva uma anotação…" autocomplete="off"><button class="btn claro">Anotar</button></form>
-    <ol class="tfl-hist">${hist.map((h) => `<li class="${h.acao === 'nota' ? 'nota' : ''}"><b>${NOME_ACAO_HIST[h.acao] || esc(h.acao)}</b>${h.detalhe ? ` <span>${esc(h.detalhe)}</span>` : ''}<small>${quando(h.created_at)}${POR_HIST[h.por] ? ` · ${POR_HIST[h.por]}` : ''}</small></li>`).join('') || '<li class="dica">Sem registros ainda.</li>'}</ol>`;
+    <ol class="tfl-hist">${hist.map((h) => `<li class="${h.acao === 'nota' ? 'nota' : ''}"><b>${NOME_ACAO_HIST[h.acao] || esc(h.acao)}</b>${h.detalhe ? ` <span>${esc(h.detalhe)}</span>` : ''}<small>${quando(h.created_at)}${POR_HIST[h.por] ? ` · ${POR_HIST[h.por]}` : /^por /.test(h.por || '') ? ` · ${esc(h.por)}` : ''}</small></li>`).join('') || '<li class="dica">Sem registros ainda.</li>'}</ol>`;
 }
 async function desenharProjetos() {
   const { projetos } = await api('/tarefas/projetos');

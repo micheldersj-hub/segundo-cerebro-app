@@ -1,5 +1,5 @@
 // Dimy Web — entrada: login, rotas, tema, contadores do menu e verificação de versão nova.
-import { $, $$, api, aviso, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
+import { $, $$, api, aviso, Conta, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
 import * as Hoje from './hoje.js';
 import * as Agenda from './agenda.js';
 import * as Tarefas from './tarefas.js';
@@ -7,14 +7,16 @@ import * as Conversa from './conversa.js';
 import * as Whats from './whats.js';
 import * as Oraculo from './oraculo.js';
 import * as Olho from './olho.js';
+import * as Equipe from './equipe.js';
 
-const TELAS = { hoje: Hoje, agenda: Agenda, tarefas: Tarefas, conversa: Conversa, whats: Whats, oraculo: Oraculo, olho: Olho };
+const TELAS = { hoje: Hoje, agenda: Agenda, tarefas: Tarefas, conversa: Conversa, equipe: Equipe, whats: Whats, oraculo: Oraculo, olho: Olho };
 let atual = null;
 
 async function rota() {
   const partes = (location.hash.replace(/^#\/?/, '') || 'hoje').split('/');
   let nome = TELAS[partes[0]] ? partes[0] : 'hoje';
   if (nome === 'whats' && !ehDono()) nome = 'hoje';
+  Conta.tela = nome;
   $$('.menu a').forEach((a) => a.classList.toggle('on', a.dataset.menu === nome));
   const tela = TELAS[nome], el = $('#principal');
   if (atual !== nome) { atual = nome; el.className = `principal tela-${nome}`; el.innerHTML = '<p class="carregando">Carregando…</p>'; }
@@ -30,7 +32,8 @@ export async function contadores(forcar = false) {
   if (!forcar && Date.now() - contEm < 25000) return;
   contEm = Date.now();
   const marca = (id, n) => { const b = $(id); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; };
-  const [h, t, o, ag] = await Promise.allSettled([api('/hoje'), api('/tarefas'), api('/olho/painel'), eventosDe(hoje(), 1)]);
+  const [h, t, o, ag, ch] = await Promise.allSettled([api('/hoje'), api('/tarefas'), api('/olho/painel'), eventosDe(hoje(), 1), api('/chat/naolidas')]);
+  if (ch.status === 'fulfilled') marca('#b-equipe', ch.value.total || 0);
   if (ag.status === 'fulfilled') marca('#b-agenda', ag.value.eventos.filter((e) => Date.parse(e.fim || e.inicio) >= Date.now()).length);
   if (h.status === 'fulfilled') { marca('#b-whats', h.value.aguardando?.length || 0); marca('#b-hoje', (h.value.avisos || []).filter((a) => !a.read_at).length); }
   if (t.status === 'fulfilled') marca('#b-tarefas', t.value.tarefas.filter((x) => x.etapa !== 'feito').length + (t.value.atrasadas?.length || 0));
@@ -38,6 +41,11 @@ export async function contadores(forcar = false) {
 }
 setInterval(() => { if (!document.hidden && Sessao.logado) contadores(true).catch(() => {}); }, 60000);
 document.addEventListener('dimy:mudou', () => contadores(true).catch(() => {}));   // telas avisam quando mudam algo
+
+// ---- Contas compartilhadas comigo (ex.: secretária vê a agenda e as tarefas do chefe) ----
+async function carregarContas() { try { Conta.carregar((await api('/chat/pessoas')).compartilhadas); } catch { Conta.carregar([]); } }
+setInterval(() => { if (!document.hidden && Sessao.logado) carregarContas().catch(() => {}); }, 5 * 60e3);
+document.addEventListener('dimy:conta', () => { if (Sessao.logado && ['agenda', 'tarefas'].includes(atual)) { const el = $('#principal'); atual = null; el.innerHTML = ''; rota(); } });
 
 // ---- Tema ----
 const TEMAS = ['auto', 'claro', 'escuro'], NOME_TEMA = { auto: 'Tema automático', claro: 'Tema claro', escuro: 'Tema escuro' };
@@ -57,7 +65,7 @@ function iniciar() {
   $('#eu-av').textContent = iniciais(u?.nome || 'M').slice(0, 1);
   $$('.so-dono').forEach((el) => { el.hidden = !ehDono(); });
   if (!location.hash) location.hash = '#/hoje';
-  rota();
+  carregarContas().finally(() => rota());
 }
 $('#form-entrar').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -91,13 +99,14 @@ $('#b-sair').addEventListener('click', () => { if (confirm('Sair do Dimy Web nes
 document.addEventListener('dimy:sair', () => { if (Sessao.logado) { Sessao.logado = false; mostrarEntrar('Sua sessão expirou. Entre de novo.'); } });
 
 addEventListener('hashchange', () => { if (Sessao.logado) rota(); });
-// Atalhos de teclado: g + h/a/t/c/w/o/e para trocar de tela; "/" busca na tela atual.
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-conta]'); if (b) Conta.escolher(b.dataset.conta); });
+// Atalhos de teclado: g + h/a/t/c/m/w/o/e para trocar de tela; "/" busca na tela atual.
 let g = 0;
 document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey || $('#janela').open) return;
   if (e.key === '/') { const b = $('#principal [data-busca]'); if (b) { e.preventDefault(); b.focus(); } return; }
   if (e.key === 'g') { g = Date.now(); return; }
-  if (Date.now() - g < 1200) { const destino = { h: 'hoje', a: 'agenda', t: 'tarefas', c: 'conversa', w: 'whats', o: 'oraculo', e: 'olho' }[e.key]; if (destino) location.hash = `#/${destino}`; g = 0; }
+  if (Date.now() - g < 1200) { const destino = { h: 'hoje', a: 'agenda', t: 'tarefas', c: 'conversa', m: 'equipe', w: 'whats', o: 'oraculo', e: 'olho' }[e.key]; if (destino) location.hash = `#/${destino}`; g = 0; }
 });
 
 // Versão nova publicada: recarrega quando a aba volta ao foco e não há nada aberto.

@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>try{var t=localStorage.getItem('cerebro-tema');if(t==='claro'||t==='escuro'){document.documentElement.dataset.theme=t==='claro'?'light':'dark';document.documentElement.dataset.tema=t}}catch(e){}</script>
-  <link rel="stylesheet" href="style.css?v=46">
+  <link rel="stylesheet" href="style.css?v=47">
 </head>
 <body>
   <!-- Entrada: login da equipe -->
@@ -71,10 +71,12 @@
         <div class="cabeca-acoes">
           <button class="tema-btn" id="b-tema" aria-label="Tema: automático" title="Claro / escuro"><svg class="t-sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="t-lua" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg><svg class="t-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18Z" class="cheio"/></svg></button>
           <button class="cfg-atalho so-dono" data-ir="config" aria-label="Configuração: crédito de IA" title="Configuração"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></button>
+          <button class="cfg-atalho chat-atalho" data-ir="equipe" aria-label="Chat da equipe" title="Chat da equipe"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/></svg><span id="badge-equipe" class="badge" hidden></span></button>
           <button class="avatar" id="avatar-eu" data-ir="mais" aria-label="Avisos e ajustes">M</button>
         </div>
       </header>
 
+      <div id="conta-agenda" class="conta-sel" role="tablist" aria-label="Agenda de quem" hidden></div>
       <section class="calendario" aria-label="Calendário do mês">
         <div class="semana-cab">
           <button id="sem-ant" class="seta" aria-label="Mês anterior"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
@@ -160,6 +162,7 @@
         </div>
         <div id="tf-semana" class="tf-semana"></div>
       </header>
+      <div id="conta-tarefas" class="conta-sel" role="tablist" aria-label="Tarefas de quem" hidden></div>
       <div class="tf-progresso"><div class="tf-barra"><span id="tf-barra"></span></div><span id="tf-progresso-txt"></span></div>
       <form id="tf-nova" class="tf-nova" autocomplete="off">
         <button type="button" id="tf-prioridade" class="tf-pri" data-p="2" aria-label="Prioridade normal">!</button>
@@ -452,6 +455,27 @@
       <div id="cfg-corpo" class="olho-corpo"><p class="dica centro">Carregando…</p></div>
     </section>
 
+    <!-- Equipe: chat interno privado -->
+    <section id="v-equipe" class="vista equipe-chat" hidden>
+      <header class="topo barra">
+        <button class="voltar" id="ch-voltar" aria-label="Voltar">‹</button>
+        <div><h1 id="ch-titulo">Equipe</h1><p class="sub" id="ch-sub">Conversas privadas: só quem participa vê</p></div>
+        <button class="mais-btn" id="ch-nova" aria-label="Nova conversa"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+      </header>
+      <div id="ch-lista-box">
+        <ul id="ch-lista" class="ch-lista"></ul>
+        <div id="ch-pe" class="ajustes"></div>
+      </div>
+      <div id="ch-conversa" class="ch-conversa" hidden>
+        <div id="ch-msgs" class="ch-msgs" aria-live="polite"></div>
+        <form id="ch-form" class="ch-form">
+          <label class="ch-anexar" aria-label="Enviar foto ou arquivo"><svg viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg><input type="file" id="ch-arquivo" multiple hidden></label>
+          <textarea id="ch-texto" rows="1" placeholder="Mensagem" aria-label="Mensagem" enterkeyhint="send"></textarea>
+          <button class="ch-enviar" aria-label="Enviar"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7Z"/></svg></button>
+        </form>
+      </div>
+    </section>
+
     <!-- Avisos e ajustes -->
     <section id="v-mais" class="vista" data-titulo="Mais" hidden>
       <header class="topo"><h1>Avisos</h1></header>
@@ -505,7 +529,7 @@
       <section id="equipe-sec" hidden>
         <h2 class="secao">Equipe</h2>
         <div class="ajustes">
-          <p class="dica">Cada pessoa tem o próprio Dimy, agenda, memória e lembretes. Os dossiês do Oráculo são do time. O WhatsApp fica só com você.</p>
+          <p class="dica">Cada pessoa tem o próprio Dimy, agenda, memória e lembretes. Os dossiês do Oráculo e o chat da equipe são do time. O WhatsApp fica só com você. Para alguém (ex.: secretária) mexer na sua agenda e nas suas tarefas, use o chat da equipe › "Compartilhar minha agenda e tarefas".</p>
           <ul id="lista-equipe" class="equipe-lista"></ul>
           <form id="form-convite" class="convite">
             <input id="convite-nome" placeholder="Nome" autocomplete="off" required>
@@ -597,6 +621,6 @@
     </section>
   </div>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script src="app.js?v=46" type="module"></script>
+  <script src="app.js?v=47" type="module"></script>
 </body>
 </html>

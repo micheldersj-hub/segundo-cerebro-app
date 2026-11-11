@@ -1,6 +1,6 @@
 // Agenda: seus compromissos do Google, em dia, semana ou mês. Clique num horário vazio para marcar;
 // clique num compromisso para editar. Grava nas mesmas rotas do app (/agenda), então aparece no celular também.
-import { $, diaISO, diaSemana, editarEvento, eEndereco, esc, eventosDe, hoje, horaISO, IC, linkMapa, maiuscula, nomeDia, somaDias } from './base.js';
+import { $, Conta, diaISO, diaSemana, editarEvento, eEndereco, esc, eventosDe, hoje, horaISO, IC, linkMapa, maiuscula, nomeDia, seletorConta, somaDias } from './base.js';
 
 export const titulo = 'Agenda';
 const MODOS = [['dia', 'Dia', IC.dia1], ['semana', 'Semana', IC.semana], ['mes', 'Mês', IC.mes]];
@@ -32,8 +32,8 @@ export async function abrir(alvo, [modo, dia] = []) {
     el = alvo; rolou = '';
     el.innerHTML = `
       <header class="cab">
-        <div><p class="cab-sup">Agenda</p><h1 id="ag-titulo"></h1></div>
-        <div class="cab-acoes">
+        <div><p class="cab-sup">${Conta.vale('agenda') ? `Agenda de ${esc(Conta.nome())}` : 'Agenda'}</p><h1 id="ag-titulo"></h1></div>
+        <div class="cab-acoes">${seletorConta('agenda')}
           <div class="seg" role="tablist" aria-label="Ver por">${MODOS.map(([k, t, ic]) => `<button role="tab" data-ag-modo="${k}">${ic}<span>${t}</span></button>`).join('')}</div>
           <button class="btn primario" data-ag="novo">${IC.mais}Compromisso</button>
         </div>

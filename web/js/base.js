@@ -2,7 +2,7 @@
 // Nada de dado fica só aqui: tudo é lido e gravado no mesmo servidor do app, por isso o que muda num aparece no outro.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-export const VERSAO = 'w3';
+export const VERSAO = 'w4';
 const PROJ = 'https://mavjbevuhzalkqyxaajw.supabase.co';
 const F = (n) => `${PROJ}/functions/v1/${n}`;
 // Chave anônima: pública por design (só permite entrar); os dados passam pelas funções, que conferem o login.
@@ -19,16 +19,36 @@ export const guardado = {
 export const Sessao = { sessao: null, chave: guardado.ler('cerebro-chave'), eu: null };
 export const ehDono = () => !Sessao.eu || !!Sessao.eu.dono;
 
+// ---- Conta em uso na Agenda e nas Tarefas: a sua ou a de quem compartilhou com você (ex.: secretária vendo a do chefe) ----
+export const Conta = {
+  lista: [],            // [{ dono, nome, agenda, tarefas }] vindas de /chat/pessoas
+  atual: null,          // id do dono escolhido; null = a minha
+  carregar(lista) { this.lista = lista || []; const g = guardado.ler('dimyweb-conta'); this.atual = this.lista.some((c) => c.dono === g) ? g : null; },
+  escolher(id) { this.atual = id || null; guardado.gravar('dimyweb-conta', this.atual); limparAgenda(); document.dispatchEvent(new Event('dimy:conta')); },
+  nome() { return this.lista.find((c) => c.dono === this.atual)?.nome || ''; },
+  pode(o) { return this.lista.filter((c) => c[o]); },
+  tela: '',             // a conta escolhida só vale nas telas Agenda e Tarefas; Hoje, chat etc. são sempre da própria pessoa
+  vale(o) { return !!this.atual && ['agenda', 'tarefas'].includes(this.tela) && this.lista.some((c) => c.dono === this.atual && c[o]); },
+};
+// Seletor "Minha | Fulano" para o cabeçalho da Agenda e das Tarefas (só aparece se alguém compartilhou com você)
+export function seletorConta(o) {
+  const outras = Conta.pode(o); if (!outras.length) return '';
+  const atual = Conta.vale(o) ? Conta.atual : '';
+  return `<div class="seg seletor-conta" role="tablist" aria-label="De quem">${[{ dono: '', nome: 'Minha' }, ...outras].map((c) => `<button role="tab" data-conta="${esc(c.dono)}" class="${c.dono === atual ? 'on' : ''}">${c.dono ? `<span class="av mini">${esc(iniciais(c.nome))}</span>${esc(c.nome.split(' ')[0])}` : 'Minha'}</button>`).join('')}</div>`;
+}
+
 // ---- API: mesmas rotas e mesma divisão por função que o app usa ----
 const ROTAS = [
   [/^\/equipe/, 'equipe', /^\/equipe/], [/^\/(gravacoes|voz)/, 'gravador'], [/^\/exportar/, 'extra'], [/^\/documento/, 'documento'],
   [/^\/rascunhos/, 'agendador'], [/^\/atendente/, 'atendente'], [/^\/tarefas/, 'tarefas', /^\/tarefas/], [/^\/olho/, 'olho', /^\/olho/],
-  [/^\/consumo/, 'consumo', /^\/consumo/], [/^\/(dossies|local|proximas)/, 'oraculo'],
+  [/^\/consumo/, 'consumo', /^\/consumo/], [/^\/(dossies|local|proximas)/, 'oraculo'], [/^\/chat\//, 'chat', /^\/chat/],
 ];
 export async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   const headers = {};
   try { Sessao.sessao = (await SUPA.auth.getSession()).data.session; } catch { Sessao.sessao = null; }
   if (Sessao.sessao) headers.authorization = `Bearer ${Sessao.sessao.access_token}`;
+  if (/^\/agenda/.test(caminho) && Conta.vale('agenda')) headers['x-conta'] = Conta.atual;
+  if (/^\/tarefas/.test(caminho) && Conta.vale('tarefas')) headers['x-conta'] = Conta.atual;
   else if (Sessao.chave) headers['x-app-key'] = Sessao.chave;
   let body;
   if (corpo instanceof Blob) { body = corpo; headers['content-type'] = tipo || corpo.type || 'application/octet-stream'; }
@@ -226,13 +246,17 @@ export const IC = {
   link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   dia1: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M12 14v4"/></svg>',
   semana: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M7.5 10v11M12 10v11M16.5 10v11"/></svg>',
+  clipe: '<svg viewBox="0 0 24 24"><path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>',
+  imagem: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-9 8"/></svg>',
+  arquivo: '<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
+  conversa: '<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9h8M8 12h5"/></svg>',
   mes: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M3 15.5h18M9 10v11M15 10v11"/></svg>',
 };
 
 // ---- Agenda (Google) com cache curto: Hoje, Agenda e Tarefas leem daqui ----
 const cacheAgenda = new Map();
 export async function eventosDe(de, dias, forcar = false) {
-  const chave = `${de}/${dias}`, c = cacheAgenda.get(chave);
+  const chave = `${Conta.vale('agenda') ? Conta.atual : ''}/${de}/${dias}`, c = cacheAgenda.get(chave);
   if (!forcar && c && Date.now() - c.em < 25000) return c.r;
   const r = await api(`/agenda?de=${de}&dias=${Math.min(42, dias)}`);
   const res = { google: r.google !== false, eventos: Array.isArray(r.eventos) ? r.eventos : [] };

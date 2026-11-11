@@ -1264,7 +1264,7 @@ body.com-voz { overflow: hidden; }
 .cfg-preset em { font-style: normal; font-size: 12.5px; color: var(--tinta-suave); }
 .cfg-preset.on em { color: color-mix(in srgb, var(--fundo) 75%, transparent); }
 .cfg-kpis .olho-kpi b { font-size: clamp(15px, 4.6vw, 19px); white-space: nowrap; }
-@media (max-width: 360px) { .cfg-atalho { display: none; } }
+@media (max-width: 360px) { .cfg-atalho:not(.chat-atalho) { display: none; } }
 
 /* v42: barra e painéis do fundo presos à área visível (corrige a barra "subindo" no iPhone depois do teclado) */
 .abas { transform: translate3d(0, var(--vv-desloc, 0px), 0); }
@@ -1325,3 +1325,32 @@ body.com-voz { overflow: hidden; }
 .cnx.fora .cnx-corpo small { color: var(--alerta); }
 .cnx .btn { flex: none; }
 @media (max-width: 370px) { .cnx { flex-wrap: wrap; } .cnx-corpo { flex-basis: calc(100% - 22px); } .cnx .btn { margin-left: 22px; } }
+
+/* ===== v47: chat interno da equipe e agenda/tarefas compartilhadas ===== */
+.chat-atalho { position: relative; } .chat-atalho .badge { top: -3px; left: auto; right: -4px; }
+.conta-sel { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 10px; padding: 2px; scrollbar-width: none; } .conta-sel::-webkit-scrollbar { display: none; }
+.conta-sel button { flex: none; border: 0; border-radius: 999px; padding: 7px 13px; font: inherit; font-size: 13.5px; font-weight: 700; background: var(--superficie); color: var(--tinta-suave); box-shadow: var(--sombra); }
+.conta-sel button.on { background: var(--roxo); color: #fff; }
+.topo.barra .mais-btn { margin-left: auto; flex: none; } .topo.barra > div { min-width: 0; flex: 1; } .topo.barra .sub { margin: 0; font-size: 12.5px; color: var(--tinta-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-lista { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; }
+.ch-item { width: 100%; display: flex; align-items: center; gap: 12px; border: 0; text-align: left; font: inherit; color: inherit; background: var(--superficie); border-radius: 14px; padding: 11px 12px; box-shadow: var(--sombra); }
+.ch-av { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--roxo-claro); color: var(--roxo); font-weight: 800; font-size: 14px; }
+.ch-av.grupo { background: var(--mar-claro); color: var(--mar-forte); } .ch-av svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.ch-corpo { flex: 1; min-width: 0; display: grid; } .ch-corpo b { font-size: 15.5px; } .ch-corpo small { color: var(--tinta-suave); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-meta { display: grid; justify-items: end; gap: 4px; flex: none; } .ch-meta small { color: var(--tinta-fraca); font-size: 11.5px; } .ch-meta .badge { position: static; }
+.ch-conversa { display: flex; flex-direction: column; height: 70vh; }   /* a altura exata é medida no app.js (ajustarAlturaChat) */
+body.chat-aberto .abas { display: none !important; }
+.ch-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 2px 10px; overscroll-behavior: contain; }
+.ch-bolha { max-width: 82%; align-self: flex-start; background: var(--superficie); box-shadow: var(--sombra); border-radius: 16px 16px 16px 5px; padding: 8px 12px; font-size: 15px; overflow-wrap: anywhere; margin-top: 7px; display: grid; gap: 2px; }
+.ch-bolha.seguida { margin-top: 0; } .ch-bolha.eu { align-self: flex-end; background: var(--mar); color: #fff; border-radius: 16px 16px 5px 16px; }
+.ch-bolha small { justify-self: end; font-size: 11px; opacity: .7; } .ch-bolha.apagada { opacity: .6; }
+.ch-autor { font-size: 12.5px; color: var(--roxo); } .ch-visto.lido { color: #BAE6FD; font-weight: 800; }
+.ch-dia { align-self: center; margin: 12px 0 4px; font-size: 12px; font-weight: 700; color: var(--tinta-suave); } .ch-dia span { background: var(--superficie-2); padding: 3px 10px; border-radius: 999px; }
+.ch-antigas { align-self: center; margin: 4px 0; }
+.ch-foto, .ch-arq { border: 0; font: inherit; color: inherit; background: rgba(0,0,0,.06); border-radius: 10px; padding: 8px 10px; text-align: left; display: grid; } .ch-foto.ok { padding: 0; background: none; }
+.ch-foto img { display: block; max-width: 100%; max-height: 300px; border-radius: 10px; } .ch-arq small { opacity: .75; } .ch-bolha.eu .ch-foto, .ch-bolha.eu .ch-arq { background: rgba(255,255,255,.18); }
+.ch-form { flex: none; display: flex; gap: 8px; align-items: flex-end; padding: 8px 0 calc(6px + env(safe-area-inset-bottom)); }
+.ch-form textarea { flex: 1; resize: none; font: inherit; font-size: 16px; border: 1px solid var(--linha); border-radius: 20px; padding: 9px 14px; background: var(--superficie); color: var(--tinta); max-height: 140px; }
+.ch-anexar, .ch-enviar { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; border: 0; }
+.ch-anexar { background: var(--superficie); color: var(--tinta-suave); box-shadow: var(--sombra); } .ch-enviar { background: var(--mar); color: #fff; }
+.ch-anexar svg, .ch-enviar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }

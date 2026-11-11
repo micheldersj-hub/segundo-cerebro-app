@@ -22,3 +22,7 @@ funções do servidor (Supabase), então tudo o que muda aqui aparece no app e v
 - Tarefas concluídas com um clique; atrasadas agrupadas; "Já respondi" para quem espera no WhatsApp.
 - "Rota no mapa" só aparece quando o local parece um endereço.
 - O calendário do mês saiu de Hoje: está na tela Agenda.
+
+## w4 (11/11)
+- **Equipe**: chat interno privado (conversa a dois e grupo "Equipe"), com fotos e arquivos, ✓✓ de visto e aviso no celular. Função `chat` no servidor; só quem participa lê.
+- **Compartilhar agenda e tarefas** (ex.: secretária): o dono marca em Equipe › "Compartilhar minha agenda e tarefas". Quem recebe escolhe "Minha | Fulano" no topo da Agenda e das Tarefas (header `x-conta`, conferido no servidor). Histórico das tarefas mostra "por <nome>"; compromissos marcados por ela levam "Marcado por <nome> pelo Dimy".

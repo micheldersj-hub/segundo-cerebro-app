@@ -450,3 +450,35 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--m
   .hj-rolagem { max-height: 420px; } .hj-bloco { min-height: 0; } .hj-lembretes, .hj-espera { max-height: none; }
 }
 @media (max-width: 760px) { .hj-painel { grid-template-columns: 1fr; } }
+
+/* ===== w4: chat da equipe e seletor de conta (Minha | do chefe) ===== */
+.seletor-conta button { gap: 7px; } .av.mini { width: 22px; height: 22px; font-size: 10.5px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--roxo-claro); color: var(--roxo); font-weight: 800; }
+.seletor-conta button.on .av.mini { background: var(--roxo); color: #fff; }
+.eq .lista-cab { display: flex; align-items: center; gap: 8px; }
+.eq-priv { display: flex; align-items: center; gap: 6px; margin: -2px 16px 8px; font-size: 12.5px; } .eq-priv svg { width: 14px; height: 14px; color: var(--mar); }
+.av.grupo { background: var(--mar-claro); color: var(--mar-forte); } .av.grupo svg { width: 20px; height: 20px; } .av.inativo { opacity: .45; }
+.eq-meta { display: grid; justify-items: end; gap: 4px; flex: none; } .eq-meta .badge { min-width: 20px; }
+.eq-pe { flex: none; display: grid; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--linha); } .eq-pe .dica { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: 13px; } .eq-pe .dica svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.btn.largo { width: 100%; }
+.eq-conversa { overflow: hidden; position: relative; }
+.eq-conversa.soltar::after { content: 'Solte para enviar'; position: absolute; inset: 10px; border: 2px dashed var(--mar); border-radius: 14px; background: color-mix(in srgb, var(--mar-claro) 80%, transparent); display: grid; place-items: center; font-weight: 800; color: var(--mar-forte); z-index: 5; }
+.eq-cab { flex: none; display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--linha); } .eq-cab div { display: grid; } .eq-cab small { color: var(--tinta-suave); font-size: 12.5px; }
+.eq-msgs { flex: 1 1 auto; min-height: 0; gap: 3px; }
+.eq-msgs .bolha { position: relative; margin-top: 8px; } .eq-msgs .bolha.seguida { margin-top: 0; }
+.eq-autor { display: block; font-size: 12.5px; color: var(--roxo); margin-bottom: 2px; }
+.eq-txt { display: block; }
+.eq-dia { align-self: center; margin: 14px 0 6px; font-size: 12px; font-weight: 700; color: var(--tinta-suave); } .eq-dia span { background: var(--superficie-2); padding: 3px 10px; border-radius: 999px; }
+.eq-antigas { align-self: center; font-size: 13px; }
+.bolha.apagada { opacity: .6; }
+.eq-visto { letter-spacing: -3px; margin-left: 2px; } .eq-visto.lido { color: #7DD3FC; font-weight: 800; } .bolha:not(.eu) .eq-visto { display: none; }
+.eq-apagar { position: absolute; top: 4px; left: -34px; width: 28px; height: 28px; border-radius: 8px; border: 0; background: var(--superficie); color: var(--tinta-suave); box-shadow: var(--sombra); cursor: pointer; display: none; place-items: center; }
+.eq-apagar svg { width: 15px; height: 15px; } .bolha.eu:hover .eq-apagar { display: grid; } .eq-apagar:hover { color: var(--vermelho); }
+.eq-foto { display: block; border: 0; padding: 0; background: none; cursor: zoom-in; border-radius: 10px; overflow: hidden; margin: 2px 0 4px; color: inherit; text-align: left; }
+.eq-foto:not(.ok) { padding: 8px 10px; background: rgba(0,0,0,.06); } .eq-foto span { display: flex; gap: 6px; align-items: center; font-weight: 700; } .eq-foto small { opacity: .7; }
+.eq-foto img { display: block; max-width: min(320px, 100%); max-height: 260px; border-radius: 10px; }
+.eq-arq { display: flex; align-items: center; gap: 10px; border: 0; background: rgba(0,0,0,.07); color: inherit; border-radius: 10px; padding: 8px 12px; margin: 2px 0 4px; cursor: pointer; text-align: left; max-width: 100%; }
+.eq-arq span:last-child { display: grid; min-width: 0; } .eq-arq b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .eq-arq small { opacity: .75; }
+.eq-arq-ic svg { width: 26px; height: 26px; } .bolha.eu .eq-arq, .bolha.eu .eq-foto:not(.ok) { background: rgba(255,255,255,.18); }
+.eq-form { flex: none; align-items: center; } .eq-form textarea { min-height: 42px; }
+.eq-anexar { cursor: pointer; width: 40px; height: 40px; } .eq-anexar svg { width: 20px; height: 20px; }
+.eq-link { word-break: break-all; background: var(--superficie-2); padding: 10px 12px; border-radius: 10px; font-family: ui-monospace, monospace; font-size: 12.5px; }

@@ -11,6 +11,9 @@ const ATENDENTE = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/atenden
 const TAREFAS = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/tarefas';
 const OLHO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/olho';
 const CONSUMO = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/consumo';
+const CHAT = 'https://mavjbevuhzalkqyxaajw.supabase.co/functions/v1/chat';
+// Conta em uso na agenda e nas tarefas: null = a minha; senão o id de quem compartilhou comigo (ex.: secretária vendo a do chefe).
+const Conta = { lista: [], agenda: null, tarefas: null };
 // Login da equipe (e-mail e senha). A chave pública só permite entrar; os dados passam pelas funções do servidor.
 const SUPA = createClient('https://mavjbevuhzalkqyxaajw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA',
@@ -27,7 +30,7 @@ const guardado = {
 let chave = guardado.ler(CHAVE);
 
 // Diagnóstico leve: erros do app e etapas do botão de voz vão para uma tabela só de escrita (para achar falhas no iPhone).
-const VERSAO = 'v46';
+const VERSAO = 'v47';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1hdmpiZXZ1aHphbGtxeXhhYWp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5ODg5OTQsImV4cCI6MjEwNjU2NDk5NH0.BGSKd3B2B0m2MuDUmdJHEVOPS6l551axEP7DVAxfidA';
 function diag(evento, detalhe = '') {
   try {
@@ -71,6 +74,16 @@ async function api(caminho, { metodo = 'GET', corpo, tipo } = {}) {
   let body;
   if (corpo instanceof Blob) { body = corpo; headers['content-type'] = tipo || corpo.type || 'application/octet-stream'; }
   else if (corpo !== undefined) { body = JSON.stringify(corpo); headers['content-type'] = 'application/json'; }
+  // Agenda/tarefas de quem compartilhou com você (ex.: secretária na agenda do chefe): o servidor confere a permissão.
+  if (/^\/agenda/.test(caminho) && Conta.agenda) headers['x-conta'] = Conta.agenda;
+  if (/^\/tarefas/.test(caminho) && Conta.tarefas) headers['x-conta'] = Conta.tarefas;
+  if (/^\/chat\//.test(caminho)) {
+    const r = await fetch(CHAT + caminho.replace(/^\/chat/, ''), { method: metodo, headers, body });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401) { sair(); throw new Error(d.erro || 'Sessão expirada. Entre de novo.'); }
+    if (!r.ok) throw Object.assign(new Error(d.erro || `Erro ${r.status}`), { status: r.status });
+    return d;
+  }
   const ehEquipe = /^\/equipe/.test(caminho);
   if (ehEquipe) caminho = caminho.replace(/^\/equipe/, '');
   const base = ehEquipe ? EQUIPE : /^\/(gravacoes|voz)/.test(caminho) ? GRAVADOR : /^\/exportar/.test(caminho) ? EXTRA : /^\/documento/.test(caminho) ? DOCUMENTO : /^\/rascunhos/.test(caminho) ? AGENDADOR : /^\/atendente/.test(caminho) ? ATENDENTE : /^\/tarefas/.test(caminho) ? TAREFAS : /^\/olho/.test(caminho) ? OLHO : /^\/consumo/.test(caminho) ? CONSUMO : /^\/(dossies|local|proximas)/.test(caminho) ? ORACULO : API;
@@ -124,9 +137,9 @@ function ha(iso) {
 // ---------------------------------------------------------------------------
 const VISTAS = {
   hoje: '#v-hoje', conversa: '#v-conversa', gravar: '#v-gravar', gravando: '#v-gravando', gravacao: '#v-gravacao',
-  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar', olho: '#v-olho', config: '#v-config',
+  whats: '#v-whats', contato: '#v-contato', tarefas: '#v-tarefas', mais: '#v-mais', oraculo: '#v-oraculo', dossie: '#v-dossie', radar: '#v-radar', olho: '#v-olho', config: '#v-config', equipe: '#v-equipe',
 };
-const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje', olho: 'hoje', config: 'mais' };
+const ABA_DE = { whats: 'hoje', contato: 'hoje', gravando: 'gravar', gravacao: 'gravar', oraculo: 'hoje', dossie: 'hoje', radar: 'hoje', olho: 'hoje', config: 'mais', equipe: 'hoje' };
 
 function ir(destino) { location.hash = destino; }
 
@@ -139,6 +152,7 @@ async function rota() {
   $('#pilula-gravando').hidden = !Rec.ativo || vista === 'gravando';
   if (vista !== 'gravacao') pararDetalhe();
   if (vista !== 'dossie') clearTimeout(Oraculo.timer);
+  if (vista !== 'equipe') { pararChat(); document.body.classList.remove('chat-aberto'); }
   window.scrollTo(0, 0);
   try {
     if (vista === 'hoje') await carregarHoje();
@@ -155,6 +169,7 @@ async function rota() {
     if (vista === 'radar') await carregarRadar();
     if (vista === 'olho') await carregarOlho();
     if (vista === 'config') await carregarConfig();
+    if (vista === 'equipe') await carregarChat(arg);
   } catch (e) { aviso(e.message); }
 }
 
@@ -367,7 +382,8 @@ function quandoCurto(iso) {
 
 async function carregarSemana() {
   const { ini, dias } = gradeAtual();
-  const chave = `${ini}/${dias}`;
+  desenharSeletorConta('agenda');
+  const chave = `${Conta.agenda || ''}/${ini}/${dias}`;
   if (chave !== Agenda.inicioSemana) {
     Agenda.inicioSemana = chave;
     try {
@@ -649,6 +665,7 @@ function atualizarBadges(d) {
   $('#badge-whats').hidden = !n; $('#badge-whats').textContent = n;
   const a = (d.avisos || []).filter((x) => !x.read_at).length;
   $('#badge-avisos').hidden = !a; $('#badge-avisos').textContent = a;
+  api('/chat/naolidas').then((r) => { $('#badge-equipe').hidden = !r.total; $('#badge-equipe').textContent = r.total > 99 ? '99+' : r.total; }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1933,7 +1950,7 @@ function iniciar() {
   $('#entrar').hidden = true; $('#app').hidden = false;
   aplicarPapel();
   if (!iniciou) { window.addEventListener('hashchange', rota); iniciou = true; }
-  rota();
+  carregarContas().finally(rota);
   iniciarGeo();
 }
 
@@ -3241,6 +3258,7 @@ function rotuloDia(d) {
 }
 async function carregarTarefas(dia) {
   TF.dia = dia || TF.dia || diaISO(new Date());
+  desenharSeletorConta('tarefas');
   desenharTarefas(await api(`/tarefas?dia=${TF.dia}`));
 }
 function cartaoTarefa(t, atrasada = false) {
@@ -4195,3 +4213,181 @@ $('#v-config').addEventListener('submit', async (e) => {
   document.addEventListener('visibilitychange', ajustar);
   ajustar();
 })();
+
+// ---------------------------------------------------------------------------
+// Equipe: chat interno privado (conversas a dois e o grupo "Equipe") e compartilhamento de agenda e tarefas
+// Só quem participa vê a conversa (o servidor confere a cada pedido). Avisos chegam no celular de quem tem notificação ligada.
+// ---------------------------------------------------------------------------
+async function carregarContas() {
+  try { Conta.lista = (await api('/chat/pessoas')).compartilhadas || []; } catch { Conta.lista = []; }
+  for (const o of ['agenda', 'tarefas']) {
+    const g = guardado.ler(`cerebro-conta-${o}`);
+    Conta[o] = Conta.lista.some((c) => c.dono === g && c[o]) ? g : null;
+  }
+}
+function desenharSeletorConta(o) {
+  const box = $(`#conta-${o}`); if (!box) return;
+  const outras = Conta.lista.filter((c) => c[o]);
+  box.hidden = !outras.length; if (!outras.length) return;
+  box.innerHTML = [{ dono: '', nome: 'Minha' }, ...outras].map((c) => `<button data-conta-${o}="${esc(c.dono)}" class="${(Conta[o] || '') === c.dono ? 'on' : ''}">${c.dono ? `${o === 'agenda' ? 'Agenda' : 'Tarefas'} de ${esc(c.nome.split(' ')[0])}` : `${o === 'agenda' ? 'Minha agenda' : 'Minhas tarefas'}`}</button>`).join('');
+}
+document.addEventListener('click', (e) => {
+  for (const o of ['agenda', 'tarefas']) {
+    const b = e.target.closest(`[data-conta-${o}]`); if (!b) continue;
+    Conta[o] = b.getAttribute(`data-conta-${o}`) || null;
+    guardado.gravar(`cerebro-conta-${o}`, Conta[o]);
+    if (o === 'agenda') { Agenda.inicioSemana = null; carregarSemana().catch((err) => aviso(err.message)); }
+    else carregarTarefas().catch((err) => aviso(err.message));
+    return;
+  }
+});
+
+const Chat = { conversas: [], atual: null, msgs: [], ultima: null, mais: false, timer: 0, enviando: false, lidoOutros: null, pessoas: null };
+function pararChat() { clearInterval(Chat.timer); Chat.timer = 0; }
+// A conversa ocupa exatamente o espaço visível (inclusive com o teclado do iPhone aberto), com a caixa de texto sempre embaixo.
+function ajustarAlturaChat() {
+  const c = $('#ch-conversa'); if (!c || c.hidden || $('#v-equipe').hidden) return;
+  const vv = window.visualViewport, alto = vv ? vv.height + vv.offsetTop : innerHeight;
+  const box = $('#ch-msgs'), noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  c.style.height = `${Math.max(220, Math.floor(alto - c.getBoundingClientRect().top))}px`;
+  if (noFim) box.scrollTop = box.scrollHeight;
+}
+window.visualViewport?.addEventListener('resize', ajustarAlturaChat);
+window.addEventListener('resize', ajustarAlturaChat);
+async function carregarChat(id) {
+  Chat.atual = id || null;
+  $('#ch-lista-box').hidden = !!id; $('#ch-conversa').hidden = !id; $('#ch-nova').hidden = !!id;
+  document.body.classList.toggle('chat-aberto', !!id);
+  if (id) requestAnimationFrame(ajustarAlturaChat);
+  const [r] = await Promise.all([api('/chat/conversas'), Chat.pessoas ? null : api('/chat/pessoas').then((p) => (Chat.pessoas = p)).catch(() => {})]);
+  Chat.conversas = r.conversas;
+  if (!id) {
+    $('#ch-titulo').textContent = 'Equipe'; $('#ch-sub').textContent = 'Conversas privadas: só quem participa vê';
+    desenharListaChat(); desenharPeChat(); pararChat();
+    Chat.timer = setInterval(() => { if (!document.hidden && !Chat.atual) api('/chat/conversas').then((x) => { Chat.conversas = x.conversas; desenharListaChat(); }).catch(() => {}); }, 15000);
+    return;
+  }
+  const c = Chat.conversas.find((x) => x.id === id);
+  $('#ch-titulo').textContent = c?.nome || 'Conversa';
+  $('#ch-sub').textContent = c?.tipo === 'grupo' ? `${c.participantes} pessoas · todos da equipe` : 'Conversa privada';
+  $('#ch-msgs').innerHTML = '<p class="dica centro">Carregando…</p>';
+  const m = await api(`/chat/conversas/${id}/mensagens`);
+  if (Chat.atual !== id) return;
+  Chat.msgs = m.mensagens; Chat.mais = m.mais; Chat.lidoOutros = m.lido_pelos_outros; Chat.ultima = Chat.msgs.at(-1)?.criado_em || null;
+  ajustarAlturaChat(); desenharMsgsChat(true); lidaChat(id);
+  pararChat();
+  Chat.timer = setInterval(() => { if (!document.hidden && Chat.atual === id) novasChat().catch(() => {}); }, 4000);
+}
+const iniciaisChat = (n) => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '•';
+function desenharListaChat() {
+  $('#ch-lista').innerHTML = Chat.conversas.map((c) => `<li><button class="ch-item" data-ir="equipe/${esc(c.id)}">
+    <span class="ch-av ${c.tipo === 'grupo' ? 'grupo' : ''}">${c.tipo === 'grupo' ? '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0M16 4.5a3.5 3.5 0 0 1 0 7M18 13.5a6 6 0 0 1 4 6"/></svg>' : esc(iniciaisChat(c.nome))}</span>
+    <span class="ch-corpo"><b>${esc(c.nome)}</b><small>${c.ultima ? `${c.ultima.autor ? `${esc(c.ultima.autor)}: ` : ''}${esc(c.ultima.texto)}` : c.tipo === 'grupo' ? `${c.participantes} pessoa${c.participantes > 1 ? 's' : ''}` : 'Comece a conversa'}</small></span>
+    <span class="ch-meta">${c.ultima ? `<small>${ha(c.ultima.em)}</small>` : ''}${c.nao_lidas ? `<i class="badge">${c.nao_lidas}</i>` : ''}</span></button></li>`).join('') || '<li class="dica centro">Nenhuma conversa ainda.</li>';
+}
+function desenharPeChat() {
+  const p = Chat.pessoas, comigo = p?.compartilhadas || [];
+  $('#ch-pe').innerHTML = `${comigo.length ? `<p class="dica">Compartilhado com você: ${comigo.map((c) => `<b>${esc(c.nome.split(' ')[0])}</b> (${[c.agenda && 'agenda', c.tarefas && 'tarefas'].filter(Boolean).join(' e ')})`).join(', ')}. Escolha no topo do calendário e das Tarefas.</p>` : ''}
+    <button class="btn claro" id="ch-compartilhar">Compartilhar minha agenda e tarefas</button>`;
+}
+const horaChat = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+const tamanhoChat = (b) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+function desenharMsgsChat(rolarFim) {
+  const box = $('#ch-msgs'), grupo = Chat.conversas.find((x) => x.id === Chat.atual)?.tipo === 'grupo';
+  let dia = '', html = Chat.mais ? '<button class="link ch-antigas" id="ch-antigas">Ver mensagens anteriores</button>' : '';
+  Chat.msgs.forEach((m, i) => {
+    const d = new Date(m.criado_em).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: 'numeric', month: 'long' });
+    if (d !== dia) { dia = d; html += `<p class="ch-dia"><span>${esc(d)}</span></p>`; }
+    const ant = Chat.msgs[i - 1], seguida = ant && ant.autor === m.autor && Date.parse(m.criado_em) - Date.parse(ant.criado_em) < 5 * 60e3;
+    if (m.apagada) { html += `<div class="ch-bolha ${m.minha ? 'eu' : ''} apagada"><i>Mensagem apagada</i><small>${horaChat(m.criado_em)}</small></div>`; return; }
+    const visto = m.minha && Chat.lidoOutros && Chat.lidoOutros >= m.criado_em;
+    const anexo = m.anexo_nome ? (/^image\//.test(m.anexo_tipo || '')
+      ? `<button class="ch-foto" data-ch-anexo="${esc(m.id)}" data-img="1">📷 ${esc(m.anexo_nome)}</button>`
+      : `<button class="ch-arq" data-ch-anexo="${esc(m.id)}"><b>📎 ${esc(m.anexo_nome)}</b><small>${tamanhoChat(m.anexo_tamanho || 0)} · abrir</small></button>`) : '';
+    html += `<div class="ch-bolha ${m.minha ? 'eu' : ''} ${seguida ? 'seguida' : ''}" ${m.minha ? `data-ch-minha="${esc(m.id)}"` : ''}>
+      ${grupo && !m.minha && !seguida ? `<b class="ch-autor">${esc(m.autor_nome)}</b>` : ''}${anexo}${m.texto ? `<span>${leve(m.texto).replace(/\n/g, '<br>')}</span>` : ''}
+      <small>${horaChat(m.criado_em)}${m.minha ? ` <span class="ch-visto ${visto ? 'lido' : ''}">${visto ? '✓✓' : '✓'}</span>` : ''}</small></div>`;
+  });
+  box.innerHTML = html || '<p class="dica centro">Nenhuma mensagem ainda. Diga um oi.</p>';
+  if (rolarFim) box.scrollTop = box.scrollHeight;
+  box.querySelectorAll('.ch-foto:not(.ok)').forEach(async (b) => {
+    try { const { url } = await api(`/chat/anexo/${b.dataset.chAnexo}`); b.classList.add('ok'); b.innerHTML = `<img src="${esc(url)}" alt="Foto enviada" loading="lazy">`; b.querySelector('img').onload = () => { if (box.scrollHeight - box.scrollTop - box.clientHeight < 400) box.scrollTop = box.scrollHeight; }; } catch { /* fica o nome */ }
+  });
+}
+async function novasChat() {
+  const id = Chat.atual; if (!id) return;
+  const r = await api(`/chat/conversas/${id}/mensagens${Chat.ultima ? `?depois=${encodeURIComponent(Chat.ultima)}` : ''}`);
+  if (Chat.atual !== id) return;
+  const ids = new Set(Chat.msgs.map((m) => m.id)), novas = r.mensagens.filter((m) => !ids.has(m.id));
+  const mudou = r.lido_pelos_outros !== Chat.lidoOutros; Chat.lidoOutros = r.lido_pelos_outros;
+  if (!novas.length && !mudou) return;
+  const box = $('#ch-msgs'), noFim = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  Chat.msgs.push(...novas); Chat.ultima = Chat.msgs.at(-1)?.criado_em || Chat.ultima;
+  desenharMsgsChat(noFim);
+  if (novas.some((m) => !m.minha)) lidaChat(id);
+}
+function lidaChat(id) { api(`/chat/conversas/${id}/lido`, { metodo: 'POST' }).then(() => api('/chat/naolidas')).then((r) => { $('#badge-equipe').hidden = !r.total; $('#badge-equipe').textContent = r.total; }).catch(() => {}); }
+async function enviarChat() {
+  const t = $('#ch-texto'), texto = t.value.trim(); if (!texto || Chat.enviando || !Chat.atual) return;
+  Chat.enviando = true; t.value = ''; t.style.height = '';
+  try { const { mensagem } = await api(`/chat/conversas/${Chat.atual}/mensagens`, { metodo: 'POST', corpo: { texto } }); Chat.msgs.push(mensagem); Chat.ultima = mensagem.criado_em; desenharMsgsChat(true); }
+  catch (err) { t.value = texto; aviso(`Não foi: ${err.message}`); }
+  finally { Chat.enviando = false; }
+}
+async function enviarArquivosChat(lista) {
+  const conv = Chat.atual;
+  for (let f of lista) {
+    if (/^image\//.test(f.type) && f.size > 1.5e6) { try { f = await reduzirFotoChat(f); } catch { /* manda o original */ } }
+    if (f.size > 25 * 1024 * 1024) { aviso(`${f.name}: grande demais (máx. 25 MB).`); continue; }
+    aviso(`Enviando ${f.name}…`);
+    try { const { mensagem } = await api(`/chat/conversas/${conv}/mensagens?nome=${encodeURIComponent(f.name)}`, { metodo: 'POST', corpo: f, tipo: f.type || 'application/octet-stream' }); if (Chat.atual === conv) { Chat.msgs.push(mensagem); Chat.ultima = mensagem.criado_em; desenharMsgsChat(true); } }
+    catch (err) { aviso(`${f.name}: ${err.message}`); }
+  }
+}
+// Foto grande do iPhone: reduz para no máx. 1600 px antes de enviar (mais rápido no 4G).
+async function reduzirFotoChat(f) {
+  const img = await createImageBitmap(f), k = Math.min(1, 1600 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const b = await new Promise((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+  return new File([b], f.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+$('#ch-form').addEventListener('submit', (e) => { e.preventDefault(); enviarChat(); });
+$('#ch-texto').addEventListener('input', (e) => { e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`; });
+$('#ch-arquivo').addEventListener('change', (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) enviarArquivosChat(f); });
+$('#ch-voltar').addEventListener('click', () => ir(Chat.atual ? 'equipe' : 'hoje'));
+$('#v-equipe').addEventListener('click', async (e) => {
+  const an = e.target.closest('[data-ch-anexo]');
+  if (an) { try { const { url } = await api(`/chat/anexo/${an.dataset.chAnexo}${an.dataset.img ? '' : '?baixar=1'}`); window.open(url, '_blank', 'noopener'); } catch (err) { aviso(err.message); } return; }
+  if (e.target.closest('#ch-antigas')) {
+    const box = $('#ch-msgs'), alt = box.scrollHeight;
+    const r = await api(`/chat/conversas/${Chat.atual}/mensagens?antes=${encodeURIComponent(Chat.msgs[0]?.criado_em || '')}`);
+    Chat.msgs.unshift(...r.mensagens); Chat.mais = r.mais; desenharMsgsChat(false); box.scrollTop = box.scrollHeight - alt; return;
+  }
+  if (e.target.closest('#ch-nova')) {
+    const equipe = Chat.pessoas?.equipe || [];
+    if (!equipe.length) { aviso(eu?.usuario?.papel === 'admin' ? 'Ainda não há mais ninguém na equipe. Convide em Avisos › Equipe.' : 'Ainda não há mais ninguém na equipe.'); return; }
+    abrirFolha({ titulo: 'Conversar com…', botao: 'Abrir conversa', campos: [{ tipo: 'escolha', rotulo: 'Pessoa', nome: 'com', opcoes: equipe.map((m, i) => ({ valor: m.id, texto: m.nome, marcado: i === 0 })) }],
+      salvar: async (f) => { const r = await api('/chat/conversas', { metodo: 'POST', corpo: { com: f.com } }); ir(`equipe/${r.id}`); } });
+    return;
+  }
+  if (e.target.closest('#ch-compartilhar')) {
+    const equipe = Chat.pessoas?.equipe || [];
+    if (!equipe.length) { aviso(eu?.usuario?.papel === 'admin' ? 'Convide a pessoa para a equipe primeiro (Avisos › Equipe).' : 'Ainda não há mais ninguém na equipe.'); return; }
+    try {
+      const { acessos } = await api('/chat/acessos'), tem = new Map(acessos.map((a) => [a.membro, a]));
+      abrirFolha({ titulo: 'Compartilhar agenda e tarefas', campos: [
+        { tipo: 'html', html: '<p class="campo-dica">Quem você marcar poderá ver e mexer: marcar, mudar e cancelar compromissos; criar, editar e concluir tarefas. Fica registrado com o nome da pessoa. Excluir tarefa de vez continua só com você.</p>' },
+        ...equipe.map((m) => ({ tipo: 'marcas', rotulo: m.nome, opcoes: [{ nome: `agenda_${m.id}`, texto: 'Minha agenda', marcado: !!tem.get(m.id)?.agenda }, { nome: `tarefas_${m.id}`, texto: 'Minhas tarefas', marcado: !!tem.get(m.id)?.tarefas }] })),
+      ], salvar: async (f) => {
+        for (const m of equipe) {
+          const agenda = !!f[`agenda_${m.id}`], tarefas = !!f[`tarefas_${m.id}`], antes = tem.get(m.id);
+          if (!!antes?.agenda === agenda && !!antes?.tarefas === tarefas) continue;
+          if (!agenda && !tarefas) await api(`/chat/acessos/${m.id}/remover`, { metodo: 'POST' });
+          else await api('/chat/acessos', { metodo: 'POST', corpo: { membro: m.id, agenda, tarefas } });
+        }
+        aviso('Compartilhamento atualizado.');
+      } });
+    } catch (err) { aviso(err.message); }
+  }
+});

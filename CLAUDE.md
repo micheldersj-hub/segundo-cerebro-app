@@ -11,3 +11,4 @@ Backend e regras completas: repositório `micheldersj-hub/segundo-c-rebro` (`CLA
 - Antes de publicar: `node --check` numa cópia `.mjs` e os testes de tela em `segundo-c-rebro/tools/ui` (320 e 390 px, claro e escuro).
 - Nunca coloque chaves ou segredos aqui: o repositório é público. A chave anônima do Supabase no app.js é pública por design.
 - Textos da interface em português simples, sem termos técnicos nem JSON na tela.
+- Equipe: chat interno (`/chat/...` → função `chat`; cuidado: `/chat` sozinho é a conversa com o Dimy na função `app`) e conta compartilhada (`Conta` + header `x-conta` só em /agenda e /tarefas). Testes: `tools/ui/interacao_equipe.mjs`.

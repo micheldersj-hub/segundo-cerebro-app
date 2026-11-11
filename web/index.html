@@ -14,7 +14,7 @@
     // Tema antes de pintar (evita piscar): claro, escuro ou automático.
     try { const t = localStorage.getItem('dimyweb-tema'); if (t === 'claro' || t === 'escuro') document.documentElement.dataset.tema = t; } catch {}
   </script>
-  <link rel="stylesheet" href="css/dimy.css?v=3">
+  <link rel="stylesheet" href="css/dimy.css?v=4">
 </head>
 <body>
   <!-- Entrar -->
@@ -45,6 +45,7 @@
         <a href="#/tarefas" data-menu="tarefas"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="m8 11 2 2 4-4M8 17h8"/></svg><span>Tarefas</span><i class="badge" id="b-tarefas" hidden></i></a>
         <p class="menu-grupo">Conversas</p>
         <a href="#/conversa" data-menu="conversa"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4Z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8Z"/></svg><span>Dimy</span></a>
+        <a href="#/equipe" data-menu="equipe"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 14 0M16 4.5a3.5 3.5 0 0 1 0 7M18 13.5a6 6 0 0 1 4 6"/></svg><span>Equipe</span><i class="badge" id="b-equipe" hidden></i></a>
         <a href="#/whats" data-menu="whats" class="so-dono"><svg viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.4 8.4 0 1 1 21 11.5z"/><path d="M9 9.5c0 3 2.5 5.5 5.5 5.5l1-1.5-2-1-1 .8a4 4 0 0 1-1.8-1.8l.8-1-1-2Z"/></svg><span>WhatsApp</span><i class="badge" id="b-whats" hidden></i></a>
         <p class="menu-grupo">Inteligência</p>
         <a href="#/oraculo" data-menu="oraculo"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 3l5 5h-5Z"/><circle cx="16.5" cy="15.5" r="3"/><path d="m21 20-2.3-2.3"/></svg><span>Oráculo</span></a>
@@ -71,6 +72,6 @@
     </form>
   </dialog>
   <div id="toast" class="toast" role="status" hidden></div>
-  <script type="module" src="js/main.js?v=3"></script>
+  <script type="module" src="js/main.js?v=4"></script>
 </body>
 </html>
