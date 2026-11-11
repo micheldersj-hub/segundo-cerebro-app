@@ -2,7 +2,7 @@
 // Nada de dado fica só aqui: tudo é lido e gravado no mesmo servidor do app, por isso o que muda num aparece no outro.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 
-export const VERSAO = 'w2';
+export const VERSAO = 'w3';
 const PROJ = 'https://mavjbevuhzalkqyxaajw.supabase.co';
 const F = (n) => `${PROJ}/functions/v1/${n}`;
 // Chave anônima: pública por design (só permite entrar); os dados passam pelas funções, que conferem o login.
@@ -190,7 +190,9 @@ export function editarLembrete(l, { sugestao, depois } = {}) {
     apagar: l ? async () => { await api(`/lembretes/${encodeURIComponent(l.id)}/cancelar`, { metodo: 'POST' }); aviso('Lembrete cancelado.'); depois?.(); } : null,
   });
 }
-export const eEndereco = (l) => !!l && l.trim().length >= 6 && !/^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(l);
+// Só oferece rota quando o "local" parece um endereço de verdade (número, rua, avenida…), não uma anotação.
+export const eEndereco = (l) => { const t = String(l || '').trim(); return t.length >= 6 && t.length <= 160 && !/^https?:|meet\.|zoom|teams|google meet|online|whatsapp|liga[cç][aã]o|telefone|videochamada/i.test(t)
+  && (/\d/.test(t) || /\b(rua|r\.|av\.?|avenida|alameda|al\.|pra[cç]a|rodovia|rod\.|estrada|travessa|largo|bairro|shopping|centro|condom[ií]nio|edif[ií]cio|ed\.)\b/i.test(t)); };
 export const linkMapa = (l) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(l)}`;
 export const IC = {
   mais: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',

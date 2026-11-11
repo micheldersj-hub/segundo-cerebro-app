@@ -15,3 +15,10 @@ funções do servidor (Supabase), então tudo o que muda aqui aparece no app e v
 - Tarefas mostra os compromissos do dia escolhido acima do quadro.
 - Menu em grupos (Seu dia, Conversas, Inteligência) e ícones nas abas.
 - Correção: cartão com anotação longa não passa mais por cima da coluna vizinha.
+
+## w3 (11/11)
+- Tela **Hoje** refeita como painel do dia: resumo clicável no topo e três colunas da mesma altura (Agenda e Lembretes · Pede você · Tarefas e Esperando). Em tela de computador tudo cabe na janela; cada bloco rola por dentro.
+- "Pede você" com abas Urgentes / Dúvidas / Avisos; cada aviso tem **Resolvido** (servidor: `POST /avisos/<id>/lido`).
+- Tarefas concluídas com um clique; atrasadas agrupadas; "Já respondi" para quem espera no WhatsApp.
+- "Rota no mapa" só aparece quando o local parece um endereço.
+- O calendário do mês saiu de Hoje: está na tela Agenda.

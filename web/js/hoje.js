@@ -1,47 +1,65 @@
-// Hoje: calendário do mês com os compromissos, agenda do dia, o que pede você agora, quem espera resposta, lembretes e tarefas.
-import { $, api, avatar, diaISO, diaSemana, editarEvento, eventosDe, editarLembrete, eEndereco, esc, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js';
+// Hoje: o painel do dia, todo visível sem rolar a página.
+// Em cima, um resumo clicável com os números do dia. Embaixo, três colunas de mesma altura; cada uma rola por dentro:
+//   1) Agenda de hoje (linha do tempo) e lembretes   2) Pede você: urgentes, dúvidas do Dimy e avisos, cada um resolvível ali
+//   3) Tarefas de hoje (concluir com um clique) e quem espera resposta no WhatsApp.
+// O calendário do mês fica na tela Agenda.
+import { $, api, aviso, avatar, diaISO, editarEvento, editarLembrete, eEndereco, esc, eventosDe, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js';
 
 export const titulo = 'Hoje';
-const H = { dia: hoje(), mes: hoje().slice(0, 7), eventos: [], google: true, dados: null, tarefas: null, olho: null, carregadoMes: '' };
+const H = { dados: null, tarefas: null, olho: null, agenda: null, amanha: null, erroAgenda: '', aba: 'urgentes', abertos: new Set(), verAtrasadas: false };
 let el = null;
 
-const inicioDaSemana = (dia) => somaDias(dia, -((diaSemana(dia) + 6) % 7));
-function grade(mes) {
-  const ini = inicioDaSemana(`${mes}-01`);
-  const [a, m] = mes.split('-').map(Number);
-  const ultimo = diaISO(new Date(Date.UTC(a, m, 0, 15)));
-  const fim = somaDias(inicioDaSemana(ultimo), 6);
-  return { ini, dias: Math.round((Date.parse(`${fim}T12:00:00Z`) - Date.parse(`${ini}T12:00:00Z`)) / 864e5) + 1 };
-}
-const mesSeguinte = (mes, n) => { const [a, m] = mes.split('-').map(Number); const d = new Date(Date.UTC(a, m - 1 + n, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; };
 function saudacao() {
   const h = Number(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' }));
   return `${h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'}, ${(Sessao.eu?.usuario?.nome || 'Michelder').split(' ')[0]}`;
 }
+const TIPOS_MSG = { unsupported: 'mandou figurinha ou reação', image: 'mandou uma foto', audio: 'mandou um áudio', video: 'mandou um vídeo', document: 'mandou um documento', sticker: 'mandou uma figurinha', location: 'mandou uma localização' };
+const limpo = (t) => String(t || '').replace(/\[(\w+)\]/g, (m, k) => TIPOS_MSG[k.toLowerCase()] || m).replace(/^[\s\p{Extended_Pictographic}️]+/u, '').trim();
+const destinoAviso = (a) => {
+  if (a.data?.contact) return `#/whats/${a.data.contact}`;
+  const u = String(a.data?.url || '');
+  if (u.startsWith('./#')) return `#/${u.slice(3).replace(/^contato\//, 'whats/').replace(/^dossie\//, 'oraculo/').replace(/^(hoje|avisos|mais)$/, 'hoje')}`;
+  return '';
+};
 
 export async function abrir(alvo) {
   el = alvo;
   el.innerHTML = `
-    <header class="cab">
+    <header class="cab hj-cab">
       <div><p class="cab-sup" id="h-saud"></p><h1 id="h-data"></h1></div>
-      <div class="cab-acoes"><a class="btn claro" href="#/agenda">${IC.cal}Abrir agenda</a><button class="btn claro" data-h="lembrete">${IC.sino}Lembrete</button><button class="btn primario" data-h="evento">${IC.mais}Compromisso</button></div>
+      <div class="cab-acoes"><button class="btn claro" data-h="lembrete">${IC.sino}Lembrete</button><button class="btn primario" data-h="evento">${IC.mais}Compromisso</button></div>
     </header>
-    <div class="hoje-grade">
-      <section class="cartao cal">
-        <div class="cal-cab"><button class="ic-btn" data-h="mes-ant" aria-label="Mês anterior">${IC.esq}</button><h2 id="h-mes"></h2><button class="ic-btn" data-h="mes-prox" aria-label="Próximo mês">${IC.dir}</button><button class="pilula" data-h="ir-hoje" id="h-ir-hoje">Hoje</button></div>
-        <div class="cal-letras">${['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map((d) => `<span>${d}</span>`).join('')}</div>
-        <div class="cal-mes" id="h-grade" role="grid"></div>
+    <nav class="hj-resumo" id="h-resumo" aria-label="Resumo do dia"></nav>
+    <div class="hj-painel">
+      <div class="hj-coluna">
+        <section class="cartao hj-bloco hj-agenda">
+          <header class="hj-bloco-cab"><h2>${IC.cal}<span>Agenda</span></h2><span class="contador" id="h-ag-n"></span><a class="link" href="#/agenda/semana">Semana</a><button class="ic-btn" data-h="evento" title="Novo compromisso" aria-label="Novo compromisso">${IC.mais}</button></header>
+          <div class="hj-rolagem" id="h-agenda"></div>
+        </section>
+        <section class="cartao hj-bloco hj-lembretes">
+          <header class="hj-bloco-cab"><h2>${IC.sino}<span>Lembretes</span></h2><span class="contador" id="h-lb-n"></span><button class="ic-btn" data-h="lembrete" title="Novo lembrete" aria-label="Novo lembrete">${IC.mais}</button></header>
+          <div class="hj-rolagem" id="h-lembretes"></div>
+        </section>
+      </div>
+      <section class="cartao hj-bloco hj-pede">
+        <header class="hj-bloco-cab"><h2>${IC.alerta}<span>Pede você</span></h2><button class="link" data-h="todos-vistos" id="h-todos" hidden>Marcar todos como vistos</button></header>
+        <nav class="seg hj-abas" id="h-abas" role="tablist"></nav>
+        <div class="hj-rolagem" id="h-pede"></div>
       </section>
-      <section class="cartao agenda-dia"><div class="sec-cab"><h2 id="h-agenda-t">Agenda</h2><a class="link" href="#/agenda/semana">Ver semana</a><button class="ic-btn" data-h="evento" aria-label="Novo compromisso">${IC.mais}</button></div><div id="h-agenda"></div></section>
-      <aside class="hoje-lado">
-        <section class="cartao"><div class="sec-cab"><h2>Agora</h2><span class="contador" id="h-agora-n"></span></div><div id="h-agora" class="agora"></div></section>
-        <section class="cartao so-dono" id="h-espera-sec" hidden><div class="sec-cab"><h2 id="h-espera-t">Esperando você</h2><a class="link" href="#/whats">Abrir WhatsApp</a></div><ul id="h-espera" class="lista-pessoas"></ul></section>
-        <section class="cartao"><div class="sec-cab"><h2>Lembretes</h2><button class="ic-btn" data-h="lembrete" aria-label="Novo lembrete">${IC.mais}</button></div><ul id="h-lembretes" class="lista-simples"></ul></section>
-        <section class="cartao"><div class="sec-cab"><h2>Tarefas de hoje</h2><a class="link" href="#/tarefas">Ver todas</a></div><div id="h-tarefas"></div></section>
-        <a class="cartao olho-mini" href="#/olho" id="h-olho"></a>
-      </aside>
+      <div class="hj-coluna">
+        <section class="cartao hj-bloco hj-tarefas">
+          <header class="hj-bloco-cab"><h2>${IC.tarefas}<span>Tarefas</span></h2><span class="contador" id="h-tf-n"></span><a class="link" href="#/tarefas">Quadro</a></header>
+          <div class="hj-progresso" id="h-tf-prog"></div>
+          <div class="hj-rolagem" id="h-tarefas"></div>
+        </section>
+        <section class="cartao hj-bloco hj-espera so-dono" id="h-espera-sec">
+          <header class="hj-bloco-cab"><h2>${IC.whats}<span>Esperando</span></h2><span class="contador" id="h-es-n"></span><a class="link" href="#/whats">WhatsApp</a></header>
+          <div class="hj-rolagem" id="h-espera"></div>
+        </section>
+      </div>
     </div>`;
   el.onclick = clique;
+  if (Sessao.eu && !Sessao.eu.dono) $('#h-espera-sec').hidden = true;
   await atualizar();
 }
 
@@ -49,113 +67,173 @@ export async function atualizar(silencioso = false) {
   if (!el?.isConnected) return;
   $('#h-saud').textContent = saudacao();
   $('#h-data').textContent = maiuscula(nomeDia(hoje(), { weekday: 'long', day: 'numeric', month: 'long' }));
-  const [d] = await Promise.all([api('/hoje'), carregarMes(silencioso), api('/tarefas').then((t) => (H.tarefas = t)).catch(() => {}), api('/olho/painel').then((o) => (H.olho = o)).catch(() => {})]);
+  const hj = hoje();
+  const [d] = await Promise.all([
+    api('/hoje'),
+    eventosDe(hj, 2, silencioso).then((r) => { H.agenda = r; H.erroAgenda = ''; }).catch((e) => { H.agenda = null; H.erroAgenda = e.message; }),
+    api('/tarefas').then((t) => (H.tarefas = t)).catch(() => {}),
+    api('/olho/painel').then((o) => (H.olho = o)).catch(() => {}),
+  ]);
   H.dados = d;
-  desenharAgora(d); desenharEspera(d.aguardando || []); desenharLembretes(d.lembretes || []); desenharTarefas(); desenharOlho();
+  desenharResumo(); desenharAgenda(); desenharLembretes(); desenharPede(); desenharTarefas(); desenharEspera();
 }
 
-async function carregarMes(forcar) {
-  const { ini, dias } = grade(H.mes);
-  const chave = `${ini}/${dias}`;
-  if (forcar || chave !== H.carregadoMes) {
-    try { const r = await eventosDe(ini, dias, forcar); H.google = r.google; H.eventos = r.eventos; H.carregadoMes = chave; H.erroAgenda = ''; }
-    catch (e) { H.eventos = []; H.erroAgenda = e.message; }
+// ---------- Dados derivados ----------
+const eventosHoje = () => (H.agenda?.eventos || []).filter((e) => diaISO(e.inicio) === hoje()).sort((a, b) => a.inicio.localeCompare(b.inicio));
+const eventosAmanha = () => (H.agenda?.eventos || []).filter((e) => diaISO(e.inicio) === somaDias(hoje(), 1)).sort((a, b) => a.inicio.localeCompare(b.inicio));
+function pendencias() {
+  const d = H.dados || {}, avisos = (d.avisos || []).filter((a) => !a.read_at);
+  return {
+    urgentes: avisos.filter((a) => a.kind === 'urgente'),
+    duvidas: d.perguntas || [],
+    avisos: avisos.filter((a) => a.kind !== 'urgente'),
+  };
+}
+const esperando = () => [...(H.dados?.aguardando || [])].sort((x, y) => Date.parse(y.last_in_at || y.last_seen) - Date.parse(x.last_in_at || x.last_seen));
+
+// ---------- Resumo do dia (cada número leva ao lugar certo) ----------
+function desenharResumo() {
+  const evs = eventosHoje(), agora = Date.now(), restam = evs.filter((e) => Date.parse(e.fim || e.inicio) >= agora).length;
+  const t = H.tarefas, abertas = t ? t.tarefas.filter((x) => x.etapa !== 'feito').length : 0, atr = t?.atrasadas?.length || 0;
+  const p = pendencias(), esp = esperando().length;
+  const k = H.olho?.kpis, alertas = k ? k.alertas.critico + k.alertas.alto + k.alertas.medio + k.alertas.baixo : 0;
+  const prox = evs.find((e) => Date.parse(e.fim || e.inicio) >= agora);
+  const tiles = [
+    { ic: IC.cal, n: restam, t: restam === 1 ? 'compromisso' : 'compromissos', s: prox ? `Próximo ${prox.dia_inteiro ? 'hoje' : `às ${horaISO(prox.inicio)}`}: ${prox.titulo}` : evs.length ? 'Agenda de hoje encerrada' : 'Dia livre', ir: `#/agenda/dia/${hoje()}`, cor: 'mar' },
+    { ic: IC.tarefas, n: abertas + atr, t: abertas + atr === 1 ? 'tarefa' : 'tarefas', s: atr ? `${atr} atrasada${atr > 1 ? 's' : ''}` : abertas ? 'Nenhuma atrasada' : 'Tudo em dia', ir: '#/tarefas', cor: atr ? 'vermelho' : 'azul' },
+    { ic: IC.alerta, n: p.urgentes.length, t: 'urgentes', s: p.duvidas.length ? `${p.duvidas.length} dúvida${p.duvidas.length > 1 ? 's' : ''} do Dimy` : 'Sem dúvidas do Dimy', aba: 'urgentes', cor: p.urgentes.length ? 'vermelho' : 'cinza' },
+    ...(Sessao.eu && !Sessao.eu.dono ? [] : [{ ic: IC.whats, n: esp, t: 'esperando', s: esp ? `no WhatsApp · mais antigo ${ha(esperando().at(-1).last_in_at || esperando().at(-1).last_seen)}` : 'Ninguém esperando', ir: '#/whats', cor: esp ? 'verde' : 'cinza' }]),
+    { ic: IC.olho, n: alertas, t: alertas === 1 ? 'alerta' : 'alertas', s: k ? `Olho de Deus · ${k.movimentos_30d} movimentos` : 'Olho de Deus', ir: '#/olho/alertas', cor: alertas ? 'ambar' : 'cinza' },
+  ];
+  $('#h-resumo').innerHTML = tiles.map((x) => `<${x.ir ? `a href="${x.ir}"` : `button data-h-aba="${x.aba}"`} class="hj-tile c-${x.cor}">
+    <span class="hj-tile-ic">${x.ic}</span><span class="hj-tile-txt"><span class="hj-tile-l"><b>${x.n}</b> ${esc(x.t)}</span><small>${esc(x.s)}</small></span></${x.ir ? 'a' : 'button'}>`).join('');
+}
+
+// ---------- Coluna 1: agenda e lembretes ----------
+function desenharAgenda() {
+  const box = $('#h-agenda'), hj = hoje();
+  if (H.erroAgenda) { box.innerHTML = `<p class="vazio">Não consegui ler sua agenda agora (${esc(H.erroAgenda)}). Tento de novo em instantes.</p>`; $('#h-ag-n').textContent = ''; return; }
+  if (H.agenda && !H.agenda.google) { box.innerHTML = '<p class="vazio">Conecte o Google no app (Avisos › Ajustes) para ver sua agenda aqui.</p>'; return; }
+  const evs = eventosHoje(), agora = Date.now();
+  $('#h-ag-n').textContent = evs.length || '';
+  let html = '';
+  if (!evs.length) html = `<button class="vazio-cartao" data-h="evento">${IC.cal}<span>Dia livre<small>Clique para marcar um compromisso</small></span></button>`;
+  else {
+    let marcou = false;
+    html = '<ol class="linha-tempo">' + evs.map((e, k) => {
+      let linha = '';
+      if (!marcou && Date.parse(e.inicio) > agora) { marcou = true; linha = `<li class="agora-linha"><span>${horaISO(new Date())}</span></li>`; }
+      const passou = Date.parse(e.fim || e.inicio) < agora, rota = eEndereco(e.local) && !passou;
+      return `${linha}<li class="ev ${passou ? 'passou' : ''} c${k % 5}"><button class="ev-cartao" data-evento="${esc(e.id)}">
+        <span class="ev-h">${e.dia_inteiro ? 'Dia todo' : `${horaISO(e.inicio)}${e.fim ? ` – ${horaISO(e.fim)}` : ''}`}</span>
+        <span class="ev-t">${esc(e.titulo)}</span>${e.local ? `<span class="ev-l">${rota ? IC.local : ''}${esc(e.local)}</span>` : ''}</button>
+        ${rota ? `<a class="ic-btn" href="${esc(linkMapa(e.local))}" target="_blank" rel="noopener" title="Rota no mapa" aria-label="Rota no mapa">${IC.local}</a>` : ''}</li>`;
+    }).join('') + (!marcou ? `<li class="agora-linha"><span>${horaISO(new Date())}</span></li>` : '') + '</ol>';
   }
-  desenharMes(); desenharDia();
+  const am = eventosAmanha();
+  if (am.length) html += `<a class="hj-amanha" href="#/agenda/dia/${somaDias(hj, 1)}"><b>Amanhã</b> ${am.length} compromisso${am.length > 1 ? 's' : ''} · primeiro ${am[0].dia_inteiro ? 'o dia todo' : `às ${horaISO(am[0].inicio)}`}: ${esc(am[0].titulo)}</a>`;
+  box.innerHTML = html;
+}
+function desenharLembretes() {
+  const lem = H.dados?.lembretes || [];
+  $('#h-lb-n').textContent = lem.length || '';
+  $('#h-lembretes').innerHTML = lem.length ? `<ul class="lista-simples">${lem.map((l) => `<li><button class="lembrete" data-lembrete="${esc(l.id)}">${IC.sino}<span>${esc(l.text)}</span><small>${quando(l.due_at)}</small></button></li>`).join('')}</ul>`
+    : `<button class="vazio-cartao mini" data-h="lembrete">${IC.mais}Criar um lembrete</button>`;
 }
 
-function desenharMes() {
-  const { ini, dias } = grade(H.mes), hj = hoje();
-  $('#h-mes').textContent = maiuscula(nomeDia(`${H.mes}-15`, { month: 'long', year: 'numeric' }));
-  $('#h-ir-hoje').hidden = H.mes === hj.slice(0, 7) && H.dia === hj;
-  const porDia = {};
-  for (const e of H.eventos) (porDia[diaISO(e.inicio)] ||= []).push(e);
-  $('#h-grade').innerHTML = Array.from({ length: dias }, (_, k) => {
-    const dia = somaDias(ini, k), evs = (porDia[dia] || []).sort((a, b) => a.inicio.localeCompare(b.inicio)), ds = diaSemana(dia);
-    const cls = ['cal-dia', dia === H.dia ? 'sel' : '', dia === hj ? 'hoje' : '', dia.slice(0, 7) !== H.mes ? 'fora' : '', ds === 0 || ds === 6 ? 'fds' : ''].join(' ');
-    return `<button class="${cls}" data-dia="${dia}" role="gridcell" aria-label="${nomeDia(dia, { day: 'numeric', month: 'long' })}${evs.length ? `, ${evs.length} compromisso(s)` : ''}">
-      <span class="cal-n">${Number(dia.slice(8))}</span>
-      ${evs.slice(0, 3).map((e) => `<span class="cal-ev">${e.dia_inteiro ? '' : `<b>${horaISO(e.inicio)}</b> `}${esc(e.titulo)}</span>`).join('')}
-      ${evs.length > 3 ? `<span class="cal-mais">+${evs.length - 3}</span>` : ''}</button>`;
-  }).join('');
+// ---------- Coluna 2: o que pede você ----------
+const ABAS = [['urgentes', 'Urgentes'], ['duvidas', 'Dúvidas'], ['avisos', 'Avisos']];
+function desenharPede() {
+  const p = pendencias();
+  if (!p[H.aba].length) H.aba = ABAS.find(([k]) => p[k].length)?.[0] || H.aba;
+  $('#h-abas').innerHTML = ABAS.map(([k, t]) => `<button role="tab" data-h-aba="${k}" class="${H.aba === k ? 'on' : ''}" aria-selected="${H.aba === k}">${t}${p[k].length ? ` <i class="badge ${k === 'urgentes' ? 'alerta' : ''}">${p[k].length}</i>` : ''}</button>`).join('');
+  $('#h-todos').hidden = !(p.urgentes.length + p.avisos.length);
+  const lista = p[H.aba], box = $('#h-pede');
+  if (!lista.length) { box.innerHTML = `<div class="vazio-grande">${IC.ok}<b>${H.aba === 'duvidas' ? 'Nenhuma dúvida do Dimy' : 'Nada pendente aqui'}</b><span>Quando algo precisar de você, aparece nesta coluna.</span></div>`; return; }
+  box.innerHTML = `<ul class="hj-itens">${lista.map((x) => item(x)).join('')}</ul>`;
+}
+function item(x) {
+  if (H.aba === 'duvidas') {
+    return `<li class="hj-item t-duvida"><div class="hj-item-txt"><p>${esc(x.question)}</p><small>${ha(x.created_at)}</small></div>
+      <div class="hj-item-acoes"><a class="btn claro mini" href="#/conversa" data-h-responder="${esc(x.question)}">Responder ao Dimy</a></div></li>`;
+  }
+  const titulo = limpo(x.title).replace(/^urgente:?\s*/i, ''), corpo = limpo(x.body), ir = destinoAviso(x), aberto = H.abertos.has(x.id);
+  return `<li class="hj-item ${x.kind === 'urgente' ? 't-urgente' : 't-aviso'} ${aberto ? 'aberto' : ''}">
+    <div class="hj-item-txt" data-h-expandir="${esc(x.id)}" title="${aberto ? 'Recolher' : 'Ver tudo'}"><b>${esc(titulo)}</b><p>${esc(corpo)}</p><small>${ha(x.created_at)}</small></div>
+    <div class="hj-item-acoes">${ir ? `<a class="btn claro mini" href="${esc(ir)}">${ir.startsWith('#/whats') ? 'Abrir conversa' : 'Abrir'}</a>` : ''}
+      <button class="btn claro mini" data-h-visto="${esc(x.id)}" title="Tirar desta lista">${IC.ok}Resolvido</button></div></li>`;
 }
 
-function desenharDia() {
-  const hj = hoje(), dia = H.dia;
-  $('#h-agenda-t').textContent = dia === hj ? 'Agenda de hoje' : dia === somaDias(hj, 1) ? 'Agenda de amanhã' : maiuscula(nomeDia(dia, { weekday: 'long', day: 'numeric', month: 'short' }));
-  const box = $('#h-agenda');
-  if (H.erroAgenda) { box.innerHTML = `<p class="vazio">Não consegui ler sua agenda agora (${esc(H.erroAgenda)}). Tento de novo em instantes.</p>`; return; }
-  if (!H.google) { box.innerHTML = '<p class="vazio">Conecte o Google no app (Avisos › Ajustes) para ver sua agenda aqui.</p>'; return; }
-  const evs = H.eventos.filter((e) => diaISO(e.inicio) === dia).sort((a, b) => a.inicio.localeCompare(b.inicio));
-  if (!evs.length) { box.innerHTML = `<button class="vazio-cartao" data-h="evento">${IC.cal}<span>Dia livre<small>Clique para marcar um compromisso</small></span></button>`; return; }
-  const agora = Date.now();
-  let marcou = dia !== hj;
-  box.innerHTML = '<ol class="linha-tempo">' + evs.map((e, k) => {
-    let linha = '';
-    if (!marcou && Date.parse(e.inicio) > agora) { marcou = true; linha = `<li class="agora-linha"><span>${horaISO(new Date())}</span></li>`; }
-    const passou = e.fim && Date.parse(e.fim) < agora;
-    return `${linha}<li class="ev ${passou ? 'passou' : ''} c${k % 5}"><button class="ev-cartao" data-evento="${esc(e.id)}">
-      <span class="ev-h">${e.dia_inteiro ? 'Dia todo' : `${horaISO(e.inicio)}${e.fim ? ` – ${horaISO(e.fim)}` : ''}`}</span>
-      <span class="ev-t">${esc(e.titulo)}</span>${e.local ? `<span class="ev-l">${IC.local}${esc(e.local)}</span>` : ''}</button>
-      ${eEndereco(e.local) && !passou ? `<a class="pilula" href="${esc(linkMapa(e.local))}" target="_blank" rel="noopener">Rota no mapa</a>` : ''}</li>`;
-  }).join('') + (!marcou ? `<li class="agora-linha"><span>${horaISO(new Date())}</span></li>` : '') + '</ol>';
-}
-
-const TIPOS_MSG = { unsupported: 'mandou figurinha ou reação', image: 'mandou uma foto', audio: 'mandou um áudio', video: 'mandou um vídeo', document: 'mandou um documento', sticker: 'mandou uma figurinha', location: 'mandou uma localização' };
-const textoAviso = (t) => String(t || '').replace(/\[(\w+)\]/g, (m, k) => TIPOS_MSG[k.toLowerCase()] || m).replace(/^\p{Extended_Pictographic}\s*/u, '');
-function desenharAgora(d) {
-  const itens = [];
-  for (const u of d.avisos.filter((a) => a.kind === 'urgente' && !a.read_at).slice(0, 5)) itens.push({ t: 'urgente', r: 'Urgente', x: `${u.title.replace(/^🚨\s*/, '')}: ${u.body}`, ir: u.data?.contact ? `#/whats/${u.data.contact}` : '' });
-  for (const p of d.perguntas || []) itens.push({ t: 'pergunta', r: 'Dúvida do Dimy', x: p.question, ir: '#/conversa' });
-  for (const e of (Array.isArray(d.agenda) ? d.agenda : []).filter((x) => new Date(x.inicio) - Date.now() < 3 * 3600e3 && new Date(x.inicio) > Date.now() - 15 * 60e3).slice(0, 3)) itens.push({ t: 'agenda', r: `Agenda · ${horaISO(e.inicio)}`, x: `${e.titulo}${e.local ? `, em ${e.local}` : ''}` });
-  for (const c of (d.aguardando || []).filter((x) => Date.now() - Date.parse(x.last_in_at || x.last_seen) < 48 * 3600e3).slice(0, 4)) itens.push({ t: 'whats', r: 'Espera resposta', x: `${nomeDe(c)}${c.last_summary ? `: ${c.last_summary}` : ' mandou mensagem.'}`, ir: `#/whats/${c.wa_id}` });
-  for (const l of (d.lembretes || []).filter((x) => new Date(x.due_at) - Date.now() < 6 * 3600e3).slice(0, 3)) itens.push({ t: 'lembrete', r: `Lembrete · ${horaISO(l.due_at)}`, x: l.text });
-  for (const a of d.avisos.filter((x) => !x.read_at && x.kind !== 'urgente' && Date.now() - Date.parse(x.created_at) < 24 * 3600e3).slice(0, 4)) itens.push({ t: 'aviso', r: textoAviso(a.title), x: textoAviso(a.body), ir: a.data?.contact ? `#/whats/${a.data.contact}` : String(a.data?.url || '').startsWith('./#') ? `#/${a.data.url.slice(3).replace(/^contato\//, 'whats/').replace(/^dossie\//, 'oraculo/')}` : '' });
-  $('#h-agora-n').textContent = itens.length || '';
-  $('#h-agora').innerHTML = itens.length ? itens.map((a) => `<${a.ir ? `a href="${esc(a.ir)}"` : 'div'} class="agora-item t-${a.t}"><small>${esc(a.r)}</small><span>${esc(a.x)}</span></${a.ir ? 'a' : 'div'}>`).join('')
-    : '<p class="vazio">Nada pedindo você agora.</p>';
-}
-function desenharEspera(esp) {
-  const sec = $('#h-espera-sec'); sec.hidden = !esp.length || (Sessao.eu && !Sessao.eu.dono);
-  const t = (c) => c.last_in_at || c.last_seen;
-  const ord = [...esp].sort((x, y) => Date.parse(t(y)) - Date.parse(t(x)));
-  $('#h-espera-t').textContent = `${ord.length} esperando você`;
-  $('#h-espera').innerHTML = ord.slice(0, 6).map((c) => `<li><a class="pessoa" href="#/whats/${esc(c.wa_id)}">${avatar(c)}<span class="pessoa-corpo"><b>${esc(nomeDe(c))}</b><small>${esc(c.last_summary || 'Mandou mensagem')}</small></span><span class="h">${ha(t(c))}</span></a>
-    <button class="ic-btn ok" data-resolver="${esc(c.wa_id)}" title="Marcar como respondida" aria-label="Marcar como respondida">${IC.ok}</button></li>`).join('');
-}
-function desenharLembretes(lem) {
-  $('#h-lembretes').innerHTML = lem.length ? lem.map((l) => `<li><button class="lembrete" data-lembrete="${esc(l.id)}">${IC.sino}<span>${esc(l.text)}</span><small>${quando(l.due_at)}</small></button></li>`).join('')
-    : `<li><button class="vazio-cartao mini" data-h="lembrete">${IC.mais}Criar um lembrete</button></li>`;
-}
+// ---------- Coluna 3: tarefas e quem espera ----------
 function desenharTarefas() {
-  const t = H.tarefas; if (!t) { $('#h-tarefas').innerHTML = ''; return; }
-  const abertas = [...(t.atrasadas || []), ...t.tarefas.filter((x) => x.etapa !== 'feito')];
-  const feitas = t.tarefas.filter((x) => x.etapa === 'feito').length, total = t.tarefas.length;
-  $('#h-tarefas').innerHTML = `${total ? `<div class="barra"><span style="width:${Math.round((feitas / total) * 100)}%"></span></div><p class="dica">${feitas} de ${total} feitas${t.atrasadas?.length ? ` · ${t.atrasadas.length} atrasada(s)` : ''}</p>` : ''}
-    <ul class="lista-simples">${abertas.slice(0, 6).map((x) => `<li><a class="tf-mini ${x.prioridade === 1 ? 'p1' : ''}" href="#/tarefas"><i class="et-${x.etapa}"></i>${esc(x.titulo)}</a></li>`).join('') || '<li class="vazio">Nada aberto para hoje.</li>'}</ul>`;
+  const t = H.tarefas, box = $('#h-tarefas');
+  if (!t) { box.innerHTML = '<p class="vazio">Não consegui carregar as tarefas.</p>'; return; }
+  const doDia = t.tarefas, feitas = doDia.filter((x) => x.etapa === 'feito').length, abertas = doDia.filter((x) => x.etapa !== 'feito'), atr = t.atrasadas || [];
+  $('#h-tf-n').textContent = abertas.length + atr.length || '';
+  $('#h-tf-prog').innerHTML = doDia.length ? `<div class="barra"><span style="width:${Math.round((feitas / doDia.length) * 100)}%"></span></div><small>${feitas} de ${doDia.length} de hoje feitas</small>` : '';
+  const li = (x, atrasada) => `<li class="hj-tf ${x.prioridade === 1 ? 'p1' : ''}">
+    <button class="tf-check mini" data-h-concluir="${esc(x.id)}" title="Concluir" aria-label="Concluir">${IC.ok}</button>
+    <a href="#/tarefas" class="hj-tf-t"><span>${esc(x.titulo)}</span>${atrasada ? `<small class="atr">de ${nomeDia(x.dia, { day: '2-digit', month: 'short' }).replace('.', '')}</small>` : x.etapa === 'fazendo' ? '<small class="faz">fazendo</small>' : ''}</a></li>`;
+  let html = abertas.length ? `<ul class="hj-tfs">${abertas.map((x) => li(x, false)).join('')}</ul>` : `<p class="vazio">${doDia.length ? 'Tudo de hoje feito. 👏' : 'Nada marcado para hoje.'}</p>`;
+  if (atr.length) {
+    html += `<button class="hj-grupo ${H.verAtrasadas ? 'aberto' : ''}" data-h="atrasadas">${IC.dir}<b>${atr.length} atrasada${atr.length > 1 ? 's' : ''}</b><span>${H.verAtrasadas ? 'esconder' : 'mostrar'}</span></button>`;
+    if (H.verAtrasadas) html += `<ul class="hj-tfs">${atr.map((x) => li(x, true)).join('')}</ul>`;
+  }
+  box.innerHTML = html;
 }
-function desenharOlho() {
-  const o = H.olho, a = $('#h-olho'); if (!o) { a.hidden = true; return; }
-  const k = o.kpis, n = k.alertas.critico + k.alertas.alto + k.alertas.medio + k.alertas.baixo;
-  a.hidden = false;
-  a.innerHTML = `<span class="olho-ic"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-    <span><b>Olho de Deus</b><small>${k.concorrentes} concorrentes · ${k.similares} similares · ${k.movimentos_30d} movimentos em 30 dias</small></span>${n ? `<i class="badge alerta">${n}</i>` : ''}`;
+function desenharEspera() {
+  const esp = esperando(); $('#h-es-n').textContent = esp.length || '';
+  const t = (c) => c.last_in_at || c.last_seen;
+  $('#h-espera').innerHTML = esp.length ? `<ul class="lista-pessoas">${esp.map((c) => `<li><a class="pessoa" href="#/whats/${esc(c.wa_id)}">${avatar(c)}<span class="pessoa-corpo"><b>${esc(nomeDe(c))}</b><small>${esc(c.last_summary || 'Mandou mensagem')}</small></span><span class="h">${ha(t(c))}</span></a>
+    <button class="ic-btn ok" data-resolver="${esc(c.wa_id)}" title="Já respondi" aria-label="Já respondi">${IC.ok}</button></li>`).join('')}</ul>`
+    : '<p class="vazio">Ninguém esperando resposta.</p>';
 }
 
+// ---------- Ações ----------
+const mudou = () => document.dispatchEvent(new Event('dimy:mudou'));
 async function clique(e) {
-  const dia = e.target.closest('[data-dia]');
-  if (dia) { H.dia = dia.dataset.dia; if (H.dia.slice(0, 7) !== H.mes) { H.mes = H.dia.slice(0, 7); await carregarMes(); } else { desenharMes(); desenharDia(); } return; }
   const ev = e.target.closest('[data-evento]');
-  if (ev) { const x = H.eventos.find((i) => i.id === ev.dataset.evento); if (x) editarEvento(x, { depois: recarregarAgenda }); return; }
+  if (ev) { const x = (H.agenda?.eventos || []).find((i) => i.id === ev.dataset.evento); if (x) editarEvento(x, { depois: () => atualizar(true) }); return; }
   const lb = e.target.closest('[data-lembrete]');
   if (lb) { const l = H.dados?.lembretes?.find((x) => x.id === lb.dataset.lembrete); if (l) editarLembrete(l, { depois: () => atualizar() }); return; }
+  const ab = e.target.closest('[data-h-aba]');
+  if (ab) { H.aba = ab.dataset.hAba; desenharPede(); $('#h-pede').scrollTop = 0; return; }
+  const ex = e.target.closest('[data-h-expandir]');
+  if (ex) { const id = ex.dataset.hExpandir; H.abertos.has(id) ? H.abertos.delete(id) : H.abertos.add(id); ex.closest('.hj-item').classList.toggle('aberto'); return; }
+  const rp = e.target.closest('[data-h-responder]');
+  if (rp) { try { sessionStorage.setItem('dimy-rascunho', `Sobre sua dúvida "${rp.dataset.hResponder}": `); } catch { /* sem armazenamento */ } return; }
+  const vs = e.target.closest('[data-h-visto]');
+  if (vs) {
+    const li = vs.closest('li'); li.classList.add('saindo');
+    try {
+      await api(`/avisos/${vs.dataset.hVisto}/lido`, { metodo: 'POST' });
+      const a = H.dados.avisos.find((x) => x.id === vs.dataset.hVisto); if (a) a.read_at = new Date().toISOString();
+      desenharPede(); desenharResumo(); mudou();
+    } catch (err) { li.classList.remove('saindo'); aviso(err.status === 404 ? 'O servidor ainda está sendo atualizado. Tente de novo em um minuto.' : err.message, 'erro'); }
+    return;
+  }
+  const cc = e.target.closest('[data-h-concluir]');
+  if (cc) {
+    cc.disabled = true; cc.closest('li').classList.add('feita');
+    try { await api(`/tarefas/${cc.dataset.hConcluir}`, { metodo: 'POST', corpo: { etapa: 'feito', dia: hoje() } }); aviso('Feito! ✅'); H.tarefas = await api('/tarefas'); desenharTarefas(); desenharResumo(); mudou(); }
+    catch (err) { cc.disabled = false; cc.closest('li').classList.remove('feita'); aviso(err.message, 'erro'); }
+    return;
+  }
   const rs = e.target.closest('[data-resolver]');
-  if (rs) { rs.disabled = true; try { await api(`/contatos/${rs.dataset.resolver}/resolvido`, { metodo: 'POST' }); rs.closest('li').remove(); document.dispatchEvent(new Event('dimy:mudou')); } catch (err) { rs.disabled = false; } return; }
+  if (rs) {
+    rs.disabled = true;
+    try { await api(`/contatos/${rs.dataset.resolver}/resolvido`, { metodo: 'POST' }); H.dados.aguardando = H.dados.aguardando.filter((c) => c.wa_id !== rs.dataset.resolver); desenharEspera(); desenharResumo(); mudou(); }
+    catch (err) { rs.disabled = false; aviso(err.message, 'erro'); }
+    return;
+  }
   const b = e.target.closest('[data-h]'); if (!b) return;
   const a = b.dataset.h;
-  if (a === 'evento') editarEvento(null, { dia: H.dia, depois: recarregarAgenda });
-  if (a === 'lembrete') editarLembrete(null, { sugestao: { dia: H.dia }, depois: () => atualizar() });
-  if (a === 'mes-ant' || a === 'mes-prox') { H.mes = mesSeguinte(H.mes, a === 'mes-ant' ? -1 : 1); const hj = hoje(); H.dia = hj.slice(0, 7) === H.mes ? hj : `${H.mes}-01`; await carregarMes(); }
-  if (a === 'ir-hoje') { H.dia = hoje(); H.mes = H.dia.slice(0, 7); await carregarMes(); }
+  if (a === 'evento') editarEvento(null, { dia: hoje(), depois: () => atualizar(true) });
+  if (a === 'lembrete') editarLembrete(null, { sugestao: { dia: hoje() }, depois: () => atualizar() });
+  if (a === 'atrasadas') { H.verAtrasadas = !H.verAtrasadas; desenharTarefas(); }
+  if (a === 'todos-vistos') {
+    if (!confirm('Marcar todos os urgentes e avisos como vistos? Eles saem desta lista.')) return;
+    try { await api('/avisos/lidas', { metodo: 'POST' }); (H.dados.avisos || []).forEach((x) => { x.read_at ||= new Date().toISOString(); }); desenharPede(); desenharResumo(); mudou(); aviso('Tudo marcado como visto.'); }
+    catch (err) { aviso(err.message, 'erro'); }
+  }
 }
-async function recarregarAgenda(dia) { if (dia) { H.dia = dia; H.mes = dia.slice(0, 7); } await carregarMes(true); }

@@ -17,7 +17,8 @@ export async function abrir(alvo) {
   t.addEventListener('input', () => { t.style.height = 'auto'; t.style.height = `${Math.min(t.scrollHeight, 200)}px`; });
   t.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#cv-form').requestSubmit(); } });
   $('#cv-form').addEventListener('submit', enviar);
-  await atualizar(); t.focus();
+  try { const r = sessionStorage.getItem('dimy-rascunho'); if (r) { t.value = r; sessionStorage.removeItem('dimy-rascunho'); } } catch { /* sem armazenamento */ }
+  await atualizar(); t.focus(); t.setSelectionRange(t.value.length, t.value.length);
 }
 export async function atualizar() {
   if (!el?.isConnected || enviando) return;
