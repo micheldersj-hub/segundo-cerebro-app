@@ -1,6 +1,6 @@
 // WhatsApp (só o dono): contatos à esquerda, conversa e perfil à direita. Dentro das 24 h envia pelo número comercial;
 // fora disso abre o WhatsApp Web com a mensagem pronta (regra da Meta). Rascunhos do Dimy para aprovar.
-import { $, api, aviso, avatar, ehDono, esc, foneBonito, ha, IC, leve, nomeDe, nomeValido, quando, semAcento } from './base.js';
+import { $, api, aviso, avatar, ehDono, esc, foneBonito, ha, IC, leve, nomeDe, nomeValido, quando, semAcento } from './base.js?v=w7';
 
 export const titulo = 'WhatsApp';
 const W = { todos: [], atual: null, info: null, rascunho: null, q: '', seq: 0, timer: 0, assinatura: '' };

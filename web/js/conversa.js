@@ -1,5 +1,5 @@
 // Conversa com o Dimy: o mesmo histórico do app (o que você fala aqui aparece lá e vice-versa).
-import { $, api, esc, leve, quando } from './base.js';
+import { $, api, esc, leve, quando } from './base.js?v=w7';
 
 export const titulo = 'Conversa com o Dimy';
 let el = null, enviando = false, ultimo = '';

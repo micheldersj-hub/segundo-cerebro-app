@@ -1,6 +1,6 @@
 // Tarefas: quadro A fazer → Fazendo → Feito com arrastar e soltar, dia a dia; atrasadas e prazos; detalhe ao lado
 // (subtarefas, anotações, histórico); projetos, lixeira e sugestões do Dimy. Mesmas rotas do app.
-import { $, $$, abrirJanela, api, aviso, Conta, editarEvento, esc, eventosDe, ha, hoje, horaISO, IC, leve, maiuscula, nomeDia, quando, seletorConta, somaDias } from './base.js';
+import { $, $$, abrirJanela, api, aviso, Conta, editarEvento, esc, eventosDe, ha, hoje, horaISO, IC, leve, maiuscula, nomeDia, quando, seletorConta, somaDias } from './base.js?v=w7';
 
 export const titulo = 'Tarefas';
 const ETAPAS = [{ id: 'a_fazer', nome: 'A fazer', cor: 'azul', vazio: 'Nada para começar.' }, { id: 'fazendo', nome: 'Fazendo', cor: 'ambar', vazio: 'Arraste uma tarefa para cá ao começar.' }, { id: 'feito', nome: 'Feito', cor: 'verde', vazio: 'O que você concluir aparece aqui.' }];

@@ -26,3 +26,7 @@ funções do servidor (Supabase), então tudo o que muda aqui aparece no app e v
 ## w4 (11/11)
 - **Equipe**: chat interno privado (conversa a dois e grupo "Equipe"), com fotos e arquivos, ✓✓ de visto e aviso no celular. Função `chat` no servidor; só quem participa lê.
 - **Compartilhar agenda e tarefas** (ex.: secretária): o dono marca em Equipe › "Compartilhar minha agenda e tarefas". Quem recebe escolhe "Minha | Fulano" no topo da Agenda e das Tarefas (header `x-conta`, conferido no servidor). Histórico das tarefas mostra "por <nome>"; compromissos marcados por ela levam "Marcado por <nome> pelo Dimy".
+
+## Publicar uma versão nova (obrigatório)
+Rode `./versao.sh wN` (dentro de `web/`, ou em `dimy-web/` e copie). Ele sobe a versão em `base.js`, `versao.json`, `index.html`
+e em TODOS os `import` dos `.js` (`?v=wN`, igual em todos). Sem isso, o navegador mantém telas antigas por até 10 minutos.

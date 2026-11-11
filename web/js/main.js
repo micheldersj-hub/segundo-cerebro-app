@@ -1,13 +1,13 @@
 // Dimy Web — entrada: login, rotas, tema, contadores do menu e verificação de versão nova.
-import { $, $$, api, aviso, Conta, sessaoAtual, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js';
-import * as Hoje from './hoje.js';
-import * as Agenda from './agenda.js';
-import * as Tarefas from './tarefas.js';
-import * as Conversa from './conversa.js';
-import * as Whats from './whats.js';
-import * as Oraculo from './oraculo.js';
-import * as Olho from './olho.js';
-import * as Equipe from './equipe.js';
+import { $, $$, api, aviso, Conta, sessaoAtual, ehDono, eventosDe, guardado, hoje, iniciais, Sessao, Sincronia, SUPA, VERSAO } from './base.js?v=w7';
+import * as Hoje from './hoje.js?v=w7';
+import * as Agenda from './agenda.js?v=w7';
+import * as Tarefas from './tarefas.js?v=w7';
+import * as Conversa from './conversa.js?v=w7';
+import * as Whats from './whats.js?v=w7';
+import * as Oraculo from './oraculo.js?v=w7';
+import * as Olho from './olho.js?v=w7';
+import * as Equipe from './equipe.js?v=w7';
 
 const TELAS = { hoje: Hoje, agenda: Agenda, tarefas: Tarefas, conversa: Conversa, equipe: Equipe, whats: Whats, oraculo: Oraculo, olho: Olho };
 let atual = null;

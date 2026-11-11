@@ -3,7 +3,7 @@
 //   1) Agenda de hoje (linha do tempo) e lembretes   2) Pede você: urgentes, dúvidas do Dimy e avisos, cada um resolvível ali
 //   3) Tarefas de hoje (concluir com um clique) e quem espera resposta no WhatsApp.
 // O calendário do mês fica na tela Agenda.
-import { $, api, aviso, avatar, diaISO, editarEvento, editarLembrete, eEndereco, esc, eventosDe, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js';
+import { $, api, aviso, avatar, diaISO, editarEvento, editarLembrete, eEndereco, esc, eventosDe, ha, hoje, horaISO, IC, linkMapa, maiuscula, nomeDe, nomeDia, quando, Sessao, somaDias } from './base.js?v=w7';
 
 export const titulo = 'Hoje';
 const H = { dados: null, tarefas: null, olho: null, agenda: null, amanha: null, erroAgenda: '', aba: 'urgentes', abertos: new Set(), verAtrasadas: false };
